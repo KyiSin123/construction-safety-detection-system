@@ -10,7 +10,7 @@ class InstanceMixin:
     """Violation instance CRUD, review workflow, and analytics aggregation."""
 
     def find_blocking_violation(self, missing_ppe, identity=None):
-        """Return an unresolved matching violation id, if pending/ignored should block storage."""
+        """Block a duplicate open violation only within the current calendar date."""
         try:
             normalized_missing_ppe = self._normalize_missing_ppe(missing_ppe)
             if not normalized_missing_ppe:
@@ -29,6 +29,7 @@ class InstanceMixin:
                     FROM instances
                     WHERE is_compliant = 0
                       AND review_status IN (%s, %s)
+                      AND DATE(first_detected) = CURDATE()
                       AND worker_number = %s
                     ORDER BY first_detected ASC
                 ''', (*blocking_statuses, worker_number))
@@ -38,6 +39,7 @@ class InstanceMixin:
                     FROM instances
                     WHERE is_compliant = 0
                       AND review_status IN (%s, %s)
+                      AND DATE(first_detected) = CURDATE()
                       AND (worker_number IS NULL OR worker_number = '')
                     ORDER BY first_detected ASC
                 ''', blocking_statuses)
@@ -214,7 +216,7 @@ class InstanceMixin:
 
             review_statuses = [
                 {'label': status, 'count': status_counts.get(status, 0)}
-                for status in ('pending', 'worker_submitted', 'resolved', 'ignored')
+                for status in ('pending', 'worker_submitted', 'resolved')
             ]
             known_statuses = {item['label'] for item in review_statuses}
             review_statuses.extend(
@@ -262,7 +264,11 @@ class InstanceMixin:
             c = conn.cursor()
 
             query = '''
-                SELECT i.*, COALESCE(s.snapshot_count, 0) as snapshot_count
+                SELECT i.id,i.instance_id,i.first_detected,i.last_updated,i.is_compliant,
+                       i.missing_ppe,i.detected_ppe,i.worker_number,i.worker_name,i.worker_team,
+                       i.identity_confidence,i.identity_status,i.identity_source,i.identity_raw_response,
+                       i.notification_status,i.notification_error,i.review_status,i.review_reason,
+                       i.reviewed_by,i.review_updated_at,COALESCE(s.snapshot_count,0) AS snapshot_count
                 FROM instances i
                 LEFT JOIN (
                     SELECT instance_id, COUNT(*) as snapshot_count
@@ -372,7 +378,7 @@ class InstanceMixin:
             reviewed_by = str(reviewed_by or '').strip() or None
 
             if review_status not in REVIEW_STATUSES:
-                return False, 'Review status must be pending, resolved, or ignored'
+                return False, 'Review status must be pending, worker_submitted, or resolved'
 
             conn = self._connect()
             c = conn.cursor()
@@ -386,19 +392,19 @@ class InstanceMixin:
                 conn.close()
                 return False, 'Instance not found'
 
-            missing_ppe = [item.strip().lower() for item in (row[0] or '').split(',') if item.strip()]
-            if review_status == 'ignored' and not review_reason:
-                c.close()
-                conn.close()
-                return False, 'Review reason is required when ignoring a violation'
-            if review_status == 'resolved' and 'helmet' in missing_ppe and not review_reason:
-                c.close()
-                conn.close()
-                return False, 'Helmet reason is required before resolving this violation'
-            if review_status == 'resolved' and 'helmet' in missing_ppe and (row[1] != 'worker_submitted' or not row[2]):
-                c.close()
-                conn.close()
-                return False, 'Worker acknowledgement and proof photo are required before resolving this helmet violation'
+            previous_status = row[1] or 'pending'
+            if previous_status == 'resolved':
+                c.close(); conn.close(); return False, 'Resolved violations are read-only'
+            if review_status == 'worker_submitted':
+                c.close(); conn.close(); return False, 'Only worker proof can set worker_submitted'
+            if review_status == 'resolved' and previous_status == 'pending' and not review_reason:
+                c.close(); conn.close(); return False, 'A reason is required when resolving directly'
+            if review_status == 'resolved' and previous_status == 'worker_submitted' and not row[2]:
+                c.close(); conn.close(); return False, 'Worker proof is required before approval'
+            if review_status == 'pending' and previous_status == 'worker_submitted' and not review_reason:
+                c.close(); conn.close(); return False, 'A reason is required when requesting new proof'
+            if review_status == previous_status:
+                c.close(); conn.close(); return False, 'Choose a valid review action'
 
             c.execute('''
                 UPDATE instances
@@ -412,7 +418,7 @@ class InstanceMixin:
                 INSERT INTO violation_review_events (
                     instance_id, previous_status, review_status, review_reason, reviewer_name
                 ) VALUES (%s, %s, %s, %s, %s)
-            ''', (instance_id, row[1] or 'pending', review_status, review_reason or None, reviewed_by))
+            ''', (instance_id, previous_status, review_status, review_reason or None, reviewed_by))
             conn.commit()
             c.close()
             conn.close()

@@ -55,6 +55,14 @@ class ExpoPushNotifier:
             {'type': 'worker_violation', 'instance_id': instance_id},
         )
 
+    def send_worker_proof_request(self, expo_push_token, instance_id, reason):
+        return self.send(
+            expo_push_token,
+            'New safety proof required',
+            reason or 'Your supervisor requested another correction photo.',
+            {'type': 'worker_violation', 'instance_id': instance_id},
+        )
+
     def send(self, expo_push_token, title, body, data):
         if not expo_push_token:
             return {'status': 'skipped', 'error': 'No registered mobile device'}

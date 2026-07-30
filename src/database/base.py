@@ -18,7 +18,7 @@ INSTANCE_IDENTITY_COLUMNS = {
     'notification_error': 'TEXT',
 }
 INSTANCE_REVIEW_COLUMNS = {
-    'review_status': "ENUM('pending', 'worker_submitted', 'resolved', 'ignored') DEFAULT 'pending'",
+    'review_status': "ENUM('pending', 'worker_submitted', 'resolved') DEFAULT 'pending'",
     'review_reason': 'TEXT',
     'reviewed_by': 'VARCHAR(255)',
     'review_updated_at': 'DATETIME',
@@ -28,8 +28,8 @@ INSTANCE_ASSIGNMENT_COLUMNS = {
     'assigned_by_name': 'VARCHAR(255) NULL',
     'assigned_at': 'DATETIME NULL',
 }
-REVIEW_STATUSES = {'pending', 'worker_submitted', 'resolved', 'ignored'}
-BLOCKING_REVIEW_STATUSES = {'pending', 'ignored'}
+REVIEW_STATUSES = {'pending', 'worker_submitted', 'resolved'}
+BLOCKING_REVIEW_STATUSES = {'pending', 'worker_submitted'}
 
 
 class BaseDatabase:
@@ -216,6 +216,13 @@ class BaseDatabase:
                     FOREIGN KEY (supervisor_id) REFERENCES supervisors(id) ON DELETE SET NULL
                 )
             ''')
+            c.execute('''CREATE TABLE IF NOT EXISTS worker_proof_submissions (
+                id INT AUTO_INCREMENT PRIMARY KEY, instance_id VARCHAR(255) NOT NULL,
+                worker_number VARCHAR(64) NOT NULL, comment TEXT NOT NULL, proof_path TEXT NOT NULL,
+                submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (instance_id) REFERENCES instances(instance_id) ON DELETE CASCADE,
+                FOREIGN KEY (worker_number) REFERENCES workers(worker_number) ON DELETE CASCADE,
+                INDEX worker_proof_instance (instance_id, submitted_at))''')
 
             c.execute('''
                 CREATE TABLE IF NOT EXISTS attendance_records (
@@ -290,9 +297,10 @@ class BaseDatabase:
             if column not in existing_columns:
                 cursor.execute(f'ALTER TABLE instances ADD COLUMN {column} {column_type}')
         if 'review_status' in existing_columns:
+            cursor.execute("UPDATE instances SET review_status='resolved' WHERE review_status='ignored'")
             cursor.execute(
                 "ALTER TABLE instances MODIFY COLUMN review_status "
-                "ENUM('pending', 'worker_submitted', 'resolved', 'ignored') DEFAULT 'pending'"
+                "ENUM('pending', 'worker_submitted', 'resolved') DEFAULT 'pending'"
             )
 
     def _ensure_violation_notification_columns(self, cursor):

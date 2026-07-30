@@ -40,11 +40,11 @@ def seed(db):
         (1, 'helmet', 'pending'),
         (3, 'vest', 'worker_submitted'),
         (8, 'mask', 'resolved'),
-        (15, 'helmet,vest', 'ignored'),
+        (15, 'helmet,vest', 'resolved'),
     ]
     for index, (days, ppe, status) in enumerate(records, 1):
         detected = now - timedelta(days=days)
-        resolved = status in {'resolved', 'ignored'}
+        resolved = status == 'resolved'
         c.execute('''
             INSERT INTO instances (
                 instance_id, first_detected, last_updated, is_compliant, missing_ppe,

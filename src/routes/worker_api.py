@@ -104,6 +104,11 @@ def worker_violations(worker):
         request.args.get('status'), request.args.get('ppe'),
     ))
 
+@worker_api_bp.route('/api/worker/violations/counts')
+@require_worker
+def worker_violation_counts(worker):
+    return jsonify(db.worker_violation_counts(worker['worker_number']))
+
 
 @worker_api_bp.route('/api/worker/devices', methods=['POST', 'DELETE'])
 @require_worker

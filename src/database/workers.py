@@ -162,6 +162,21 @@ class WorkerMixin:
             print(f"Error getting worker violations: {e}")
             return {'items': [], 'page': 1, 'per_page': 20, 'total': 0, 'has_more': False}
 
+    def worker_violation_counts(self, worker_number):
+        try:
+            conn=self._connect(); c=conn.cursor()
+            c.execute("""SELECT review_status,COUNT(*) FROM instances
+                WHERE worker_number=%s AND identity_status='confirmed'
+                AND review_status IN ('pending','worker_submitted','resolved')
+                GROUP BY review_status""",(worker_number,))
+            counts={'pending':0,'worker_submitted':0,'resolved':0}
+            for status,count in c.fetchall():
+                if status in counts: counts[status]=count
+            c.close(); conn.close(); return counts
+        except Exception as e:
+            print(f"Error getting worker violation counts: {e}")
+            return {'pending':0,'worker_submitted':0,'resolved':0}
+
     def update_worker_profile(self, worker_number, phone, email, profile_photo_path=None):
         try:
             conn = self._connect()
@@ -220,9 +235,13 @@ class WorkerMixin:
                 c.close()
                 conn.close()
                 return False, 'This alert cannot accept a worker submission'
+            c.execute('''INSERT INTO worker_proof_submissions
+                (instance_id,worker_number,comment,proof_path) VALUES(%s,%s,%s,%s)''',
+                (instance_id,worker_number,comment,proof_path))
             c.execute('''
                 UPDATE instances SET review_status='worker_submitted', worker_acknowledged_at=CURRENT_TIMESTAMP,
-                    worker_comment=%s, worker_proof_path=%s, worker_proof_at=CURRENT_TIMESTAMP
+                    worker_comment=%s, worker_proof_path=%s, worker_proof_at=CURRENT_TIMESTAMP,
+                    review_reason=NULL,reviewed_by=NULL,review_updated_at=NULL
                 WHERE instance_id=%s
             ''', (comment, proof_path, instance_id))
             c.execute('''

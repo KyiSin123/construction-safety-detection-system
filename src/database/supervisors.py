@@ -434,12 +434,12 @@ class SupervisorMixin:
                            WHEN FIND_IN_SET('helmet', LOWER(i.missing_ppe)) > 0 THEN 2
                            ELSE 3
                        END AS alert_priority,
-                       n.is_read, n.read_at
+                       n.is_read, n.read_at, i.worker_proof_at
                 FROM violation_notifications n
                 JOIN instances i ON i.instance_id = n.instance_id
-                WHERE n.supervisor_id = %s AND (i.review_status = %s OR (%s = 'pending' AND i.review_status = 'worker_submitted'))
+                WHERE n.supervisor_id = %s AND i.review_status = %s
                 ORDER BY alert_priority ASC, i.first_detected DESC
-            ''', (supervisor_id, status, status))
+            ''', (supervisor_id, status))
             rows = c.fetchall()
             c.close()
             conn.close()
@@ -447,6 +447,22 @@ class SupervisorMixin:
         except Exception as e:
             print(f"Error getting mobile violations: {e}")
             return []
+
+    def get_mobile_violation_counts(self, supervisor_id):
+        try:
+            self.ensure_unknown_violation_access(supervisor_id)
+            conn=self._connect(); c=conn.cursor()
+            c.execute("""SELECT i.review_status,COUNT(DISTINCT i.instance_id)
+                FROM violation_notifications n JOIN instances i ON i.instance_id=n.instance_id
+                WHERE n.supervisor_id=%s AND i.review_status IN ('pending','worker_submitted','resolved')
+                GROUP BY i.review_status""",(supervisor_id,))
+            counts={'pending':0,'worker_submitted':0,'resolved':0}
+            for status,count in c.fetchall():
+                if status in counts: counts[status]=count
+            c.close(); conn.close(); return counts
+        except Exception as e:
+            print(f"Error getting mobile counts: {e}")
+            return {'pending':0,'worker_submitted':0,'resolved':0}
 
     def get_mobile_violation_detail(self, supervisor_id, instance_id):
         try:
@@ -493,6 +509,10 @@ class SupervisorMixin:
                 'status': delivery[0], 'error': delivery[1],
                 'notified_at': self._format_datetime(delivery[2]),
             } if delivery else None
+            c.execute('SELECT worker_comment,worker_proof_at FROM instances WHERE instance_id=%s',(instance_id,))
+            proof=c.fetchone()
+            result['worker_comment']=proof[0] if proof else None
+            result['worker_proof_at']=self._format_datetime(proof[1]) if proof else None
             c.execute(
                 'SELECT id, timestamp FROM snapshots WHERE instance_id = %s ORDER BY timestamp ASC',
                 (instance_id,),
@@ -592,14 +612,15 @@ class SupervisorMixin:
             conn = self._connect()
             c = conn.cursor()
             c.execute(
-                'SELECT 1 FROM violation_notifications WHERE supervisor_id = %s AND instance_id = %s',
+                '''SELECT i.worker_number FROM violation_notifications n JOIN instances i ON i.instance_id=n.instance_id
+                   WHERE n.supervisor_id=%s AND n.instance_id=%s''',
                 (supervisor_id, instance_id),
             )
-            allowed = c.fetchone() is not None
+            violation = c.fetchone()
             c.close()
             conn.close()
-            if not allowed:
-                return False, 'This violation is not assigned to you'
+            if not violation:
+                return False, 'This violation is not assigned to you', None
             ok, message = self.update_instance_review(instance_id, review_status, review_reason, supervisor.get('display_name'))
             if ok:
                 conn = self._connect()
@@ -608,13 +629,19 @@ class SupervisorMixin:
                     UPDATE violation_review_events SET supervisor_id = %s
                     WHERE instance_id = %s ORDER BY id DESC LIMIT 1
                 ''', (supervisor_id, instance_id))
+                action={'review_status':str(review_status).strip().lower()}
+                if action['review_status']=='pending':
+                    c.execute('''SELECT d.expo_push_token FROM instances i JOIN worker_devices d ON d.worker_number=i.worker_number
+                        WHERE i.instance_id=%s AND d.is_active=1''',(instance_id,))
+                    action['worker_tokens']=[row[0] for row in c.fetchall()]
                 conn.commit()
                 c.close()
                 conn.close()
-            return ok, message
+                return True,message,action
+            return False,message,None
         except Exception as e:
             print(f"Error updating mobile review: {e}")
-            return False, str(e)
+            return False, str(e), None
 
     def _supervisor_from_row(self, row):
         return {
@@ -635,6 +662,7 @@ class SupervisorMixin:
             'notified_at': self._format_datetime(row[14]), 'snapshot_count': row[15],
             'alert_priority': row[16], 'is_read': bool(row[17]),
             'read_at': self._format_datetime(row[18]),
+            'worker_proof_at': self._format_datetime(row[19]) if len(row)>19 else None,
         }
 
     def supervisor_attendance_requests(self, supervisor_id, status='pending'):
