@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash
 load_dotenv()
 
 import extensions
-from extensions import MOBILE_WEB_ORIGINS, auth_service, db, instance_detector, socketio
+from extensions import MOBILE_WEB_ORIGINS, db, instance_detector, socketio
 from routes.admin_api import admin_api_bp
 from routes.detection import detection_bp, load_model
 from routes.mobile_auth import mobile_auth_bp
@@ -43,7 +43,9 @@ def add_mobile_web_cors_headers(response):
     return response
 
 
-if __name__ == '__main__':
+def _bootstrap():
+    """Run once when this module loads -- both under `python app.py` and under a WSGI
+    server like gunicorn, which imports `app` without ever hitting `__main__`."""
     try:
         db.init_db()
         initial_admin_username = os.getenv('SUPERVISOR_INITIAL_ADMIN_USERNAME')
@@ -58,12 +60,17 @@ if __name__ == '__main__':
             print('Supervisor bootstrap admin not created: configure SUPERVISOR_INITIAL_ADMIN_USERNAME and SUPERVISOR_INITIAL_ADMIN_PASSWORD')
         load_model()
         instance_detector.update_settings(extensions.current_settings)
-        socketio.run(
-            app,
-            debug=os.getenv('FLASK_DEBUG', 'true').strip().lower() == 'true',
-            host=os.getenv('FLASK_HOST', '0.0.0.0'),
-            port=int(os.getenv('FLASK_PORT', '3333')),
-            allow_unsafe_werkzeug=True,
-        )
     except Exception as e:
-        print(f"Fatal error starting app: {e}")
+        print(f"Fatal error during startup: {e}")
+
+
+_bootstrap()
+
+if __name__ == '__main__':
+    socketio.run(
+        app,
+        debug=os.getenv('FLASK_DEBUG', 'true').strip().lower() == 'true',
+        host=os.getenv('FLASK_HOST', '0.0.0.0'),
+        port=int(os.getenv('FLASK_PORT', '3333')),
+        allow_unsafe_werkzeug=True,
+    )
