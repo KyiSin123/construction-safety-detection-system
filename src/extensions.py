@@ -41,7 +41,20 @@ def get_model():
     global _model
     if _model is None:
         from ultralytics import YOLO
-        _model = YOLO('yolov8n.pt')
+
+        # Keep uploaded-file analysis and live camera detection on the same
+        # fine-tuned PPE model. PPE_MODEL_PATH allows deployments to mount the
+        # ignored weight file outside the repository.
+        model_path = os.getenv(
+            'PPE_MODEL_PATH',
+            os.path.join(BASE_DIR, 'model', 'best.pt'),
+        )
+        if not os.path.isfile(model_path):
+            raise FileNotFoundError(
+                f'PPE model not found at {model_path}. Set PPE_MODEL_PATH to the '
+                'trained best.pt file; the generic COCO model cannot detect PPE.'
+            )
+        _model = YOLO(model_path)
     return _model
 
 MOBILE_WEB_ORIGINS = {
@@ -151,6 +164,7 @@ def send_mobile_supervisor_notifications(instance_id, missing_ppe, identity):
         )
         results.append({
             'supervisor_id': recipient['supervisor_id'],
+            'supervisor_name': recipient['display_name'],
             'status': result['status'],
             'error': result.get('error'),
         })

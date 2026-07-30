@@ -391,7 +391,7 @@
                 <a href="/admin"><i class="fas fa-gauge-high"></i> Admin dashboard</a>
                 <a href="/admin/review"><i class="fas fa-clipboard-list"></i> Violation History</a>
                 <a href="/admin/workers"><i class="fas fa-users"></i> Workers</a>
-                <a href="/admin/attendance"><i class="fas fa-calendar-check"></i> Attendance</a>
+                <!-- <a href="/admin/attendance"><i class="fas fa-calendar-check"></i> Attendance</a> -->
                 <a href="/admin/supervisors"><i class="fas fa-user-shield"></i> Supervisors</a>
                 <a href="/admin/settings" class="active"><i class="fas fa-gear"></i> Detection Settings</a>
             </div>
@@ -400,35 +400,6 @@
 
     <div class="container">
         <!-- Added detection mode card before the grid -->
-        <div class="card">
-            <div class="card-title">
-                <i class="fas fa-users"></i>
-                Detection Mode
-            </div>
-            <p class="setting-description">
-                Choose how the system handles multiple people in the frame.
-            </p>
-            <div class="radio-group">
-                <div class="radio-item" onclick="selectRadio('single')">
-                    <input type="radio" id="single" name="detectionMode" value="single" checked>
-                    <div class="radio-content">
-                        <label for="single">Single Person Detection</label>
-                        <p class="radio-description">If at least one required PPE item is detected, the person is marked as compliant. Best for monitoring individual compliance.</p>
-                    </div>
-                </div>
-                <div class="radio-item" onclick="selectRadio('multi')">
-                    <input type="radio" id="multi" name="detectionMode" value="multi">
-                    <div class="radio-content">
-                        <label for="multi">Multi-Person Detection</label>
-                        <p class="radio-description">When 1+ people are detected, all must wear required equipment. Anyone detected without required PPE marks the group as non-compliant.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="info-box">
-                <i class="fas fa-info-circle"></i>
-                <span>Multi-person mode requires detection of non-compliant equipment (no-hardhat/vest/mask) to flag violations when multiple people are present.</span>
-            </div>
-        </div>
 
         <div class="grid-2">
             <div class="card">

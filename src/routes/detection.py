@@ -50,8 +50,6 @@ def generate_frames():
     """Generate video frames with instance detection."""
     global camera, streaming, model
 
-    last_alert_time = 0
-    ALERT_COOLDOWN = extensions.current_settings['non_compliance_delay']
     last_snapshot_time = 0
     SNAPSHOT_INTERVAL = extensions.current_settings['instance_reset_timeout']
     crop_buffer = ViolationCropBuffer()
@@ -133,11 +131,29 @@ def generate_frames():
 
                             instance_result['identity'] = identity_data
                             if logged:
-                                instance_result['mobile_notifications'] = send_mobile_supervisor_notifications(
+                                notification_results = send_mobile_supervisor_notifications(
                                     instance_result['instance_id'],
                                     instance_result['missing_ppe'],
                                     identity_data,
                                 )
+                                instance_result['mobile_notifications'] = notification_results
+                                # Only add a Recent Alert after each push attempt has
+                                # completed and its sent/failed/skipped result is known.
+                                if notification_results:
+                                    worker_name = (
+                                        identity_data.get('worker_name')
+                                        or identity_data.get('worker_number')
+                                        or 'Unknown worker'
+                                    )
+                                    socketio.emit('alert', {
+                                        'timestamp': datetime.now().isoformat(),
+                                        'type': 'SUPERVISOR_NOTIFICATION_COMPLETED',
+                                        'instance_id': instance_result['instance_id'],
+                                        'description': f'PPE alert for {worker_name}',
+                                        'missing_ppe': instance_result['missing_ppe'],
+                                        'notifications': notification_results,
+                                        'dev_mode': dev_mode,
+                                    })
                                 instance_result['storage_status'] = 'stored'
                                 last_snapshot_time = current_time
                             else:
@@ -154,20 +170,6 @@ def generate_frames():
                 alert_text = "DEV MODE - TESTING" if dev_mode else "NON-COMPLIANT DETECTED"
                 cv2.putText(annotated_frame, alert_text,
                            (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-
-                if current_time - last_alert_time > ALERT_COOLDOWN:
-                    worker_name = instance_result.get('identity', {}).get('worker_name')
-                    description = (
-                        f"PPE non-compliance detected: {worker_name}"
-                        if worker_name else "PPE non-compliance detected"
-                    )
-                    socketio.emit('alert', {
-                        'timestamp': datetime.now().isoformat(),
-                        'type': 'NON_COMPLIANCE',
-                        'description': description,
-                        'dev_mode': dev_mode
-                    })
-                    last_alert_time = current_time
 
             socketio.emit('detection_update', {
                 'timestamp': datetime.now().isoformat(),
