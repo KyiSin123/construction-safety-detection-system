@@ -1,1 +1,1 @@
-web: cd src && gunicorn --worker-class gthread --threads 4 -w 1 --bind 0.0.0.0:$PORT app:app
+web: cd src && gunicorn --worker-class gthread --threads 2 -w 1 --timeout 120 --bind 0.0.0.0:$PORT app:app
