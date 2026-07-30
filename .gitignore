@@ -69,6 +69,7 @@ Model-Training/Outputstraining_log_df.csv
 *.onnx
 *.engine
 *.tflite
+!src/model/best.pt
 
 Model-Training/*
 

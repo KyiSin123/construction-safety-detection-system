@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Try PPE Detection | PPE Safety</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     :root { --ink:#172033; --muted:#637083; --line:#dbe1ea; --blue:#1769d1; --red:#b42318; --green:#008a3b; --bg:#f4f6f9; }
@@ -28,33 +31,138 @@
     .event .missing { color:var(--red); font-weight:700; }
     .event .timing { color:var(--muted); font-size:13px; }
     .summary-line { color:var(--muted); font-size:14px; margin-top:8px; }
+    /* Match the Live Detection operations dashboard */
+    body { margin:0; color:#172033; background:radial-gradient(circle at 8% 0%,rgba(37,99,235,.09),transparent 28%),#f3f6fb; font-family:'Poppins',sans-serif; }
+    .container { max-width:1400px; margin:0 auto; padding:24px; }
+    header { color:#fff; background:linear-gradient(115deg,#101827 0%,#182946 65%,#173764 100%); box-shadow:0 12px 35px rgba(15,23,42,.18); }
+    header .container { display:flex; align-items:center; justify-content:space-between; gap:24px; padding-top:18px; padding-bottom:18px; }
+    .brand { display:flex; align-items:center; gap:12px; margin:0; font-size:21px; font-weight:700; }
+    .brand span { color:#a9bad2; font-weight:400; }
+    nav { display:flex; gap:8px; }
+    nav a { padding:9px 13px; border-radius:9px; color:#b9c7dc; text-decoration:none; font-size:14px; font-weight:500; }
+    nav a:hover { color:#fff; background:rgba(255,255,255,.08); }
+    nav a.active { color:#fff; background:rgba(59,130,246,.3); box-shadow:inset 0 0 0 1px rgba(147,197,253,.25); }
+    .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; padding:32px 0 23px; }
+    .hero h1 { margin:4px 0 8px; font-size:32px; line-height:1.2; }
+    .hero p { max-width:750px; margin:0; color:#68758a; }
+    .kicker { color:#2563eb; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+    .privacy-chip { white-space:nowrap; padding:9px 13px; border:1px solid #cfe0fa; border-radius:999px; color:#315b94; background:#edf5ff; font-size:12px; font-weight:600; }
+    .tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+    .panel { min-width:0; margin:0; padding:24px; border-color:#e4e9f1; border-radius:18px; box-shadow:0 12px 32px rgba(23,32,51,.07); transition:.25s ease; }
+    .panel:hover { transform:translateY(-2px); box-shadow:0 18px 44px rgba(23,32,51,.11); }
+    .panel-heading { display:flex; align-items:center; gap:13px; margin-bottom:20px; }
+    .panel-icon { display:grid; width:42px; height:42px; place-items:center; border-radius:12px; color:#2563eb; background:#edf4ff; font-size:18px; }
+    .panel h2 { margin:0; font-size:18px; }
+    .panel-heading p { margin:2px 0 0; color:#68758a; font-size:12px; }
+    input[type=file] { padding:11px; border:1px dashed #b8c6d9; border-radius:10px; color:#68758a; background:#f8faff; }
+    input[type=file]::file-selector-button { margin-right:12px; padding:8px 11px; border:0; border-radius:7px; color:#1e4f9a; background:#e5efff; font:inherit; font-weight:600; cursor:pointer; }
+    button { padding:11px 17px; border-radius:9px; background:#2563eb; box-shadow:0 6px 14px rgba(37,99,235,.22); font-family:'Poppins',sans-serif; }
+    button:hover { background:#1d55ce; transform:translateY(-1px); }
+    .result-image { display:block; width:100%; border-radius:12px; }
+    .event { border-left:4px solid #dc3d4b; border-radius:12px; background:#fbfcfe; }
+    .event img { border-radius:8px; }
+    .event img { cursor:zoom-in; transition:transform .2s ease, box-shadow .2s ease; }
+    .event img:hover { transform:scale(1.03); box-shadow:0 10px 24px rgba(15,23,42,.18); }
+    .image-viewer {
+      position:fixed;
+      inset:0;
+      z-index:1000;
+      display:grid;
+      place-items:center;
+      padding:30px;
+      background:rgba(8,15,28,.92);
+      backdrop-filter:blur(5px);
+    }
+    .image-viewer[hidden] { display:none; }
+    .image-viewer img { max-width:95vw; max-height:90vh; object-fit:contain; border-radius:10px; box-shadow:0 24px 80px rgba(0,0,0,.5); }
+    .viewer-close {
+      position:fixed;
+      top:18px;
+      right:20px;
+      display:grid;
+      width:44px;
+      height:44px;
+      place-items:center;
+      margin:0;
+      padding:0;
+      border:1px solid rgba(255,255,255,.25);
+      border-radius:50%;
+      color:#fff;
+      background:rgba(255,255,255,.12);
+      box-shadow:none;
+      font-size:20px;
+    }
+    .viewer-close:hover { background:rgba(255,255,255,.22); }
+    .viewer-hint { position:fixed; bottom:18px; color:#cbd5e1; font-size:12px; }
+    @media (max-width:800px) {
+      header .container, .hero { align-items:flex-start; flex-direction:column; }
+      nav { width:100%; overflow-x:auto; }
+      .tool-grid { grid-template-columns:1fr; }
+      .hero h1 { font-size:27px; }
+    }
+    @media (max-width:500px) {
+      .container { padding:18px; }
+      .event { flex-direction:column; }
+      .event img { width:100%; }
+    }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <a class="home-button" href="/"><i class="fas fa-house"></i> Home</a>
-    <h1>Try PPE detection</h1>
-    <p class="lede">Upload a photo or a short video clip and the same detection model used for live monitoring will check it for PPE compliance. Nothing you upload here is saved or added to the violation history &mdash; this is a stateless preview.</p>
+  <header>
+    <div class="container">
+      <div class="brand"><i class="fas fa-shield-halved"></i> SiteGuard <span>PPE Monitor</span></div>
+      <nav>
+        <a href="/">Live Detection</a>
+        <a href="/analyze" class="active">Try PPE Detection</a>
+        <a href="/admin">Administrator Site</a>
+      </nav>
+    </div>
+  </header>
 
+  <main class="container">
+    <section class="hero">
+      <div>
+        <span class="kicker">PPE detection sandbox</span>
+        <h1>Test the safety model</h1>
+        <p>Upload a photo or short video and run the same model used by Live Detection. Preview results without creating violation records.</p>
+      </div>
+      <div class="privacy-chip"><i class="fas fa-lock"></i> Uploads are not saved</div>
+    </section>
+    <div class="tool-grid">
     <section class="panel">
-      <h2>Analyze an image</h2>
+      <div class="panel-heading">
+        <div class="panel-icon"><i class="fas fa-image"></i></div>
+        <div><h2>Analyze an image</h2><p>JPG, PNG, or a camera photo</p></div>
+      </div>
       <label for="imageInput">Image file</label>
       <input id="imageInput" type="file" accept="image/*">
-      <button id="imageButton" type="button" onclick="analyzeImage()">Analyze image</button>
+      <button id="imageButton" type="button" onclick="analyzeImage()"><i class="fas fa-wand-magic-sparkles"></i> Analyze image</button>
       <div id="imageStatus" class="status" role="status"></div>
       <div id="imageResult"></div>
     </section>
 
     <section class="panel">
-      <h2>Analyze a video clip</h2>
+      <div class="panel-heading">
+        <div class="panel-icon"><i class="fas fa-film"></i></div>
+        <div><h2>Analyze a video clip</h2><p>Scan a short recording for PPE events</p></div>
+      </div>
       <p class="summary-line">Clips are capped at 50MB and the first 60 seconds, sampled at 2 frames per second.</p>
       <label for="videoInput">Video file</label>
       <input id="videoInput" type="file" accept="video/*">
-      <button id="videoButton" type="button" onclick="analyzeVideo()">Analyze video</button>
+      <button id="videoButton" type="button" onclick="analyzeVideo()"><i class="fas fa-play"></i> Analyze video</button>
       <div id="videoStatus" class="status" role="status"></div>
       <div id="videoResult"></div>
     </section>
+    </div>
   </main>
+
+  <div id="imageViewer" class="image-viewer" hidden onclick="closePreview(event)">
+    <button class="viewer-close" type="button" aria-label="Close full-screen image" onclick="closePreview()">
+      <i class="fas fa-xmark"></i>
+    </button>
+    <img id="viewerImage" alt="Full-size violation frame">
+    <div class="viewer-hint">Click outside the image or press Esc to close</div>
+  </div>
 
   <script>
     function complianceBadge(isCompliant) {
@@ -74,6 +182,25 @@
         );
       }
     }
+
+    function openPreview(source) {
+      const viewer = document.getElementById('imageViewer');
+      document.getElementById('viewerImage').src = source;
+      viewer.hidden = false;
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closePreview(event) {
+      if (event && event.target !== event.currentTarget) return;
+      const viewer = document.getElementById('imageViewer');
+      viewer.hidden = true;
+      document.getElementById('viewerImage').src = '';
+      document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closePreview();
+    });
 
     async function analyzeImage() {
       const input = document.getElementById('imageInput');
@@ -144,7 +271,7 @@
         `;
         const events = data.violation_events.map(event => `
           <div class="event">
-            ${event.snapshot_base64 ? `<img src="data:image/jpeg;base64,${event.snapshot_base64}">` : ''}
+            ${event.snapshot_base64 ? `<img src="data:image/jpeg;base64,${event.snapshot_base64}" alt="Violation frame at ${event.start_seconds} seconds" title="Click to view full screen" onclick="openPreview(this.src)">` : ''}
             <div>
               <div class="timing">${event.start_seconds}s &ndash; ${event.end_seconds}s</div>
               <div class="missing">Missing: ${event.missing_ppe.join(', ')}</div>
