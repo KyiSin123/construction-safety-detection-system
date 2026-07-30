@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# One-time environment setup for training/fine-tuning the PPE detection model.
+set -e
+
+python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+python -m pip install jinja2
+python -m pip install opencv-python ultralytics matplotlib pandas seaborn tqdm numpy pillow

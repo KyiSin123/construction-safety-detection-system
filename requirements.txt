@@ -2,10 +2,11 @@ Flask
 Flask-SocketIO
 opencv-python
 ultralytics
+numpy
 Pillow
 python-socketio
-eventlet
 openai
 requests
 python-dotenv
 mysql-connector-python
+gunicorn
