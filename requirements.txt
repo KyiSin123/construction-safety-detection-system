@@ -2,6 +2,7 @@ Flask
 Flask-SocketIO
 opencv-python
 ultralytics
+numpy
 Pillow
 python-socketio
 eventlet

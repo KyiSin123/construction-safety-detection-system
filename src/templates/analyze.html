@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Try PPE Detection | PPE Safety</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root { --ink:#172033; --muted:#637083; --line:#dbe1ea; --blue:#1769d1; --red:#b42318; --green:#008a3b; --bg:#f4f6f9; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px Arial,sans-serif; }
+    .wrap { max-width:900px; margin:0 auto; padding:24px; }
+    .panel { background:#fff; border:1px solid var(--line); border-radius:10px; padding:24px; margin-top:22px; }
+    .home-button { display:inline-block; margin-bottom:8px; padding:10px 14px; background:#172033; color:#fff; border-radius:6px; text-decoration:none; font-weight:700; }
+    p.lede { color:var(--muted); }
+    label { display:block; margin:12px 0 6px; font-weight:700; }
+    input[type=file] { width:100%; padding:10px; border:1px solid var(--line); border-radius:5px; background:#fff; font:inherit; }
+    button { background:var(--blue); color:#fff; border:0; border-radius:5px; padding:11px 16px; font-weight:700; cursor:pointer; font:inherit; margin-top:14px; }
+    button:disabled { cursor:wait; opacity:.65; }
+    .status { min-height:20px; margin-top:12px; color:var(--muted); }
+    .status.error { color:var(--red); }
+    .badge { display:inline-block; padding:4px 12px; border-radius:999px; font-weight:700; font-size:13px; }
+    .badge.compliant { background:#e3f5e9; color:var(--green); }
+    .badge.violation { background:#fde8e6; color:var(--red); }
+    .result-image { max-width:100%; border-radius:8px; margin-top:14px; border:1px solid var(--line); }
+    .event { border:1px solid var(--line); border-radius:8px; padding:14px; margin-top:12px; display:flex; gap:14px; align-items:flex-start; }
+    .event img { width:140px; border-radius:6px; flex-shrink:0; }
+    .event .missing { color:var(--red); font-weight:700; }
+    .event .timing { color:var(--muted); font-size:13px; }
+    .summary-line { color:var(--muted); font-size:14px; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="home-button" href="/"><i class="fas fa-house"></i> Home</a>
+    <h1>Try PPE detection</h1>
+    <p class="lede">Upload a photo or a short video clip and the same detection model used for live monitoring will check it for PPE compliance. Nothing you upload here is saved or added to the violation history &mdash; this is a stateless preview.</p>
+
+    <section class="panel">
+      <h2>Analyze an image</h2>
+      <label for="imageInput">Image file</label>
+      <input id="imageInput" type="file" accept="image/*">
+      <button id="imageButton" type="button" onclick="analyzeImage()">Analyze image</button>
+      <div id="imageStatus" class="status" role="status"></div>
+      <div id="imageResult"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Analyze a video clip</h2>
+      <p class="summary-line">Clips are capped at 50MB and the first 60 seconds, sampled at 2 frames per second.</p>
+      <label for="videoInput">Video file</label>
+      <input id="videoInput" type="file" accept="video/*">
+      <button id="videoButton" type="button" onclick="analyzeVideo()">Analyze video</button>
+      <div id="videoStatus" class="status" role="status"></div>
+      <div id="videoResult"></div>
+    </section>
+  </main>
+
+  <script>
+    function complianceBadge(isCompliant) {
+      return `<span class="badge ${isCompliant ? 'compliant' : 'violation'}">${isCompliant ? 'Compliant' : 'Non-compliant'}</span>`;
+    }
+
+    async function analyzeImage() {
+      const input = document.getElementById('imageInput');
+      const status = document.getElementById('imageStatus');
+      const button = document.getElementById('imageButton');
+      const result = document.getElementById('imageResult');
+      result.innerHTML = '';
+      if (!input.files.length) {
+        status.className = 'status error';
+        status.textContent = 'Choose an image first.';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', input.files[0]);
+
+      button.disabled = true;
+      status.className = 'status';
+      status.textContent = 'Analyzing…';
+      try {
+        const response = await fetch('/api/analyze/image', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not analyze this image');
+
+        status.textContent = '';
+        result.innerHTML = `
+          ${complianceBadge(data.is_compliant)}
+          <p class="summary-line">${data.has_person ? 'Person detected.' : 'No person detected.'}
+            ${data.missing_ppe.length ? `Missing: <span class="missing">${data.missing_ppe.join(', ')}</span>` : ''}
+          </p>
+          ${data.annotated_image_base64 ? `<img class="result-image" src="data:image/jpeg;base64,${data.annotated_image_base64}">` : ''}
+        `;
+      } catch (error) {
+        status.className = 'status error';
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function analyzeVideo() {
+      const input = document.getElementById('videoInput');
+      const status = document.getElementById('videoStatus');
+      const button = document.getElementById('videoButton');
+      const result = document.getElementById('videoResult');
+      result.innerHTML = '';
+      if (!input.files.length) {
+        status.className = 'status error';
+        status.textContent = 'Choose a video first.';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('video', input.files[0]);
+
+      button.disabled = true;
+      status.className = 'status';
+      status.textContent = 'Analyzing… this can take a little while.';
+      try {
+        const response = await fetch('/api/analyze/video', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not analyze this video');
+
+        status.textContent = '';
+        const summary = `
+          ${complianceBadge(data.is_compliant)}
+          <p class="summary-line">Analyzed ${data.analyzed_frames} sampled frames (${data.sample_fps} fps) in ${data.processing_seconds}s.</p>
+        `;
+        const events = data.violation_events.map(event => `
+          <div class="event">
+            ${event.snapshot_base64 ? `<img src="data:image/jpeg;base64,${event.snapshot_base64}">` : ''}
+            <div>
+              <div class="timing">${event.start_seconds}s &ndash; ${event.end_seconds}s</div>
+              <div class="missing">Missing: ${event.missing_ppe.join(', ')}</div>
+            </div>
+          </div>
+        `).join('');
+        result.innerHTML = summary + (events || '<p class="summary-line">No violations found in this clip.</p>');
+      } catch (error) {
+        status.className = 'status error';
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
