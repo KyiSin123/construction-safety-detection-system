@@ -1,5 +1,7 @@
 """HTML page routes for the detection operator and admin dashboards."""
 
+import os
+
 from flask import Blueprint, redirect, render_template
 
 pages_bp = Blueprint('pages', __name__)
@@ -7,8 +9,14 @@ pages_bp = Blueprint('pages', __name__)
 
 @pages_bp.route('/')
 def index():
-    """Detection operator frontend."""
-    return render_template('index.html')
+    """Detection operator frontend.
+
+    Shows the live camera controls only when CAMERA_AVAILABLE is set (defaults to true,
+    which is right for local dev); a cloud deployment with no camera attached should set
+    CAMERA_AVAILABLE=false so this falls back to the upload-based detection UI instead.
+    """
+    camera_available = os.getenv('CAMERA_AVAILABLE', 'true').strip().lower() == 'true'
+    return render_template('index.html', camera_available=camera_available)
 
 
 @pages_bp.route('/admin')
