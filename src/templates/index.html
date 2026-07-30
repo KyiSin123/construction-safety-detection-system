@@ -648,6 +648,20 @@
             return items.map(item => `<span class="ppe-badge${missing ? ' missing' : ''}">${item}</span>`).join('');
         }
 
+        async function parseJsonResponse(response) {
+            const text = await response.text();
+            try {
+                return JSON.parse(text);
+            } catch {
+                const timedOut = response.status === 502 || response.status === 504;
+                throw new Error(
+                    timedOut
+                        ? 'The server took too long to respond (it may be under-resourced) -- try a smaller file or try again.'
+                        : `Unexpected response from the server (HTTP ${response.status}).`
+                );
+            }
+        }
+
         async function analyzeImage() {
             const input = document.getElementById('imageInput');
             const status = document.getElementById('imageStatus');
@@ -667,7 +681,7 @@
             status.textContent = 'Analyzing…';
             try {
                 const response = await fetch('/api/analyze/image', { method: 'POST', body: formData });
-                const data = await response.json();
+                const data = await parseJsonResponse(response);
                 if (!response.ok) throw new Error(data.error || 'Could not analyze this image');
                 status.textContent = '';
                 const missing = data.missing_ppe.length ? `<div style="margin-top: 8px;">Missing: ${ppeBadges(data.missing_ppe, true)}</div>` : '';
@@ -700,7 +714,7 @@
             status.textContent = 'Analyzing… this can take a little while.';
             try {
                 const response = await fetch('/api/analyze/video', { method: 'POST', body: formData });
-                const data = await response.json();
+                const data = await parseJsonResponse(response);
                 if (!response.ok) throw new Error(data.error || 'Could not analyze this video');
                 status.textContent = '';
                 const summary = `${complianceBadge(data.is_compliant)}<p style="margin-top: 8px; color: var(--text-secondary); font-size: 13px;">Analyzed ${data.analyzed_frames} sampled frames (${data.sample_fps} fps) in ${data.processing_seconds}s.</p>`;
