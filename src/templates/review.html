@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workers' Violation History - PPE Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #f8f9fb;
+            --bg-secondary: #ffffff;
+            --text-primary: #1a202c;
+            --text-secondary: #718096;
+            --accent-blue: #4a90e2;
+            --accent-green: #48bb78;
+            --accent-red: #e65c5c;
+            --accent-orange: #ed8936;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+        header {
+            background: var(--bg-secondary);
+            padding: 20px 0;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 32px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        header h1 {
+            font-size: 26px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-links { margin-top: 12px; display: flex; gap: 20px; flex-wrap: wrap; }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover, .nav-links a.active { color: var(--accent-blue); }
+        .nav-links a.active { border-bottom: 2px solid var(--accent-blue); padding-bottom: 2px; }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+            padding: 24px;
+        }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 22px;
+        }
+
+        .page-title { font-size: 24px; font-weight: 650; }
+        .page-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+
+        .stat-box {
+            min-width: 160px;
+            background: var(--bg-primary);
+            border-left: 4px solid var(--accent-red);
+            border-radius: 8px;
+            padding: 14px 18px;
+        }
+        .stat-value { font-size: 28px; font-weight: 700; }
+        .stat-label { color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 18px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        select, input, textarea {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text-primary);
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+        }
+        select, input { padding: 10px 12px; }
+        textarea { padding: 12px; resize: vertical; min-height: 96px; }
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+
+        .table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1120px; background: #fff; }
+        th {
+            text-align: left;
+            background: #f3f6fa;
+            color: #4a5568;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+        td {
+            padding: 14px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+            font-size: 13px;
+        }
+        tr:last-child td { border-bottom: none; }
+
+        .worker-name { font-weight: 650; }
+        .muted { color: var(--text-secondary); font-size: 12px; }
+        .reason-cell { max-width: 260px; white-space: normal; }
+        .missing-list { display: flex; flex-wrap: wrap; gap: 5px; }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+        .badge.missing { background: rgba(230, 92, 92, 0.1); color: var(--accent-red); }
+        .badge.pending { background: rgba(237, 137, 54, 0.13); color: var(--accent-orange); }
+        .badge.resolved { background: rgba(72, 187, 120, 0.13); color: var(--accent-green); }
+        .badge.ignored { background: rgba(113, 128, 150, 0.13); color: #4a5568; }
+        .badge.warning { background: rgba(237, 137, 54, 0.13); color: var(--accent-orange); }
+        .badge.info { background: rgba(74, 144, 226, 0.1); color: var(--accent-blue); }
+
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            border: none;
+            border-radius: 7px;
+            padding: 8px 11px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 12px;
+            font-weight: 650;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.15s ease, filter 0.15s ease;
+        }
+        .btn:hover { transform: translateY(-1px); filter: brightness(0.96); }
+        .btn-primary { background: var(--accent-blue); color: #fff; }
+        .btn-secondary { background: #edf2f7; color: #2d3748; }
+        .btn-danger { background: var(--accent-red); color: #fff; }
+        .btn-success { background: var(--accent-green); color: #fff; }
+
+        .empty-state {
+            text-align: center;
+            padding: 56px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state i { font-size: 48px; opacity: 0.35; margin-bottom: 14px; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.68);
+            overflow: auto;
+            padding: 24px;
+        }
+        .modal.active { display: flex; align-items: center; justify-content: center; }
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 26px;
+            width: min(1000px, 96vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+        }
+        .modal-content.narrow { width: min(560px, 96vw); }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding-bottom: 14px;
+            margin-bottom: 18px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .modal-title { font-size: 20px; font-weight: 650; }
+        .close-btn {
+            width: 34px;
+            height: 34px;
+            border: none;
+            background: #edf2f7;
+            border-radius: 50%;
+            color: var(--text-secondary);
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .detail-item {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .detail-label { color: var(--text-secondary); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+        .detail-value { font-size: 13px; font-weight: 500; }
+
+        .snapshots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+        .snapshot-item {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        .snapshot-image { width: 100%; height: 190px; object-fit: cover; cursor: pointer; display: block; }
+        .snapshot-info { padding: 12px; }
+        .snapshot-number { font-size: 14px; font-weight: 650; margin-bottom: 4px; }
+        .snapshot-time { color: var(--text-secondary); font-size: 12px; }
+
+        .form-field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
+        .form-field label { font-size: 13px; font-weight: 650; color: #4a5568; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+        .toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            background: #1a202c;
+            color: #fff;
+            border-radius: 8px;
+            padding: 12px 14px;
+            box-shadow: var(--shadow-lg);
+            display: none;
+            z-index: 1200;
+            font-size: 13px;
+        }
+        .toast.error { background: var(--accent-red); }
+
+        @media (max-width: 768px) {
+            .container { padding: 16px; }
+            .page-head { flex-direction: column; }
+            .stat-box { width: 100%; }
+            .filter-bar, .filter-group { align-items: stretch; flex-direction: column; }
+            .filter-group { width: 100%; }
+            select, input { width: 100%; }
+            .modal { padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-shield-alt"></i> Smart Helmet Detection System</h1>
+            <div class="nav-links">
+                <a href="/"><i class="fas fa-house"></i> Home</a>
+                <a href="/admin"><i class="fas fa-gauge-high"></i> Admin dashboard</a>
+                <a href="/admin/review" class="active"><i class="fas fa-clipboard-list"></i> Violation History</a>
+                <a href="/admin/workers"><i class="fas fa-users"></i> Workers</a>
+                <!-- <a href="/admin/attendance"><i class="fas fa-calendar-check"></i> Attendance</a> -->
+                <a href="/admin/supervisors"><i class="fas fa-user-shield"></i> Supervisors</a>
+                <a href="/admin/settings"><i class="fas fa-gear"></i> Detection Settings</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="panel">
+            <div class="page-head">
+                <div>
+                    <div class="page-title">Workers' Violation History</div>
+                    <div class="page-subtitle">Review detected PPE violations, record helmet reasons, and track final status.</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="totalInstances">0</div>
+                    <div class="stat-label">Visible violations</div>
+                </div>
+            </div>
+
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label for="statusFilter">Status</label>
+                    <select id="statusFilter" onchange="loadInstances()">
+                        <option value="">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="ignored">Ignored</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="sortBy">Sort by</label>
+                    <select id="sortBy" onchange="loadInstances()">
+                        <option value="first_detected">First Detected</option>
+                        <option value="last_updated">Last Detected / Updated</option>
+                        <option value="review_updated_at">Review Updated</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="sortOrder">Order</label>
+                    <select id="sortOrder" onchange="loadInstances()">
+                        <option value="desc">Newest First</option>
+                        <option value="asc">Oldest First</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Worker</th>
+                            <th>Violation Time</th>
+                            <th>Last Detected / Updated</th>
+                            <th>Missing PPE</th>
+                            <th>Helmet Reason / Review Reason</th>
+                            <th>Status</th>
+                            <th>Review Updated</th>
+                            <th>Snapshots</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="violationsTable">
+                        <tr>
+                            <td colspan="9">
+                                <div class="empty-state">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <p>Loading violation history...</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="snapshotModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="snapshotModalTitle">Violation Snapshots</div>
+                <button class="close-btn" onclick="closeSnapshotModal()">&times;</button>
+            </div>
+            <div id="snapshotModalBody">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading snapshots...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reviewModal" class="modal">
+        <div class="modal-content narrow">
+            <div class="modal-header">
+                <div class="modal-title">Update Status</div>
+                <button class="close-btn" onclick="closeReviewModal()">&times;</button>
+            </div>
+            <form onsubmit="saveReview(event)">
+                <div class="form-field">
+                    <label for="reviewInstance">Violation</label>
+                    <input id="reviewInstance" disabled>
+                </div>
+                <div class="form-field">
+                    <label for="reviewStatus">Review Status</label>
+                    <select id="reviewStatus" required>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="ignored">Ignored</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="reviewReason">Reason of not wearing helmet / review reason</label>
+                    <textarea id="reviewReason" placeholder="Example: Forgot helmet at storage area"></textarea>
+                </div>
+                <div class="form-field">
+                    <label for="reviewedBy">Reviewed by</label>
+                    <input id="reviewedBy" placeholder="Safety officer">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeReviewModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const adminToken = sessionStorage.getItem('supervisor_admin_token');
+        if (!adminToken) window.location.replace('/admin');
+        function adminFetch(path, options = {}) {
+            options.headers = { ...(options.headers || {}), Authorization: `Bearer ${adminToken}` };
+            return fetch(path, options);
+        }
+        let violationsCache = [];
+        let currentReviewId = null;
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function formatDate(value) {
+            if (!value) return '<span class="muted">Not updated</span>';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return escapeHtml(value);
+            return date.toLocaleString();
+        }
+
+        function statusBadge(status) {
+            const normalized = status || 'pending';
+            const icon = normalized === 'resolved'
+                ? 'fa-check-circle'
+                : normalized === 'ignored'
+                    ? 'fa-ban'
+                    : 'fa-clock';
+            return `<span class="badge ${escapeHtml(normalized)}"><i class="fas ${icon}"></i>${escapeHtml(normalized)}</span>`;
+        }
+
+        function missingBadges(items) {
+            const list = (items || []).filter(Boolean);
+            if (!list.length) return '<span class="muted">None recorded</span>';
+            return `<div class="missing-list">${list.map(item => `<span class="badge missing">${escapeHtml(item)}</span>`).join('')}</div>`;
+        }
+
+        function workerLabel(instance) {
+            if (instance.worker_name) {
+                return `
+                    <div class="worker-name">${escapeHtml(instance.worker_name)}</div>
+                    <div class="muted">${escapeHtml(instance.worker_number || 'No worker number')}</div>
+                    <div class="muted">${escapeHtml(instance.worker_team || '')}</div>
+                `;
+            }
+            return `
+                <div class="worker-name">${escapeHtml(instance.worker_number || 'Unknown Worker')}</div>
+                <div class="muted">${escapeHtml(instance.identity_status || 'unknown')}</div>
+            `;
+        }
+
+        function loadInstances() {
+            const sortBy = document.getElementById('sortBy').value;
+            const sortOrder = document.getElementById('sortOrder').value;
+            const status = document.getElementById('statusFilter').value;
+            const params = new URLSearchParams({ sort: sortBy, order: sortOrder });
+            if (status) params.set('status', status);
+
+            adminFetch(`/api/admin/instances?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    violationsCache = Array.isArray(data) ? data : [];
+                    renderTable();
+                })
+                .catch(error => {
+                    console.error('Error loading instances:', error);
+                    document.getElementById('violationsTable').innerHTML = `
+                        <tr><td colspan="9"><div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Error loading violation history</p></div></td></tr>
+                    `;
+                    showToast('Error loading violation history', true);
+                });
+        }
+
+        function renderTable() {
+            const table = document.getElementById('violationsTable');
+            document.getElementById('totalInstances').textContent = violationsCache.length;
+
+            if (!violationsCache.length) {
+                table.innerHTML = `
+                    <tr><td colspan="9"><div class="empty-state"><i class="fas fa-inbox"></i><p>No violations found</p></div></td></tr>
+                `;
+                return;
+            }
+
+            table.innerHTML = violationsCache.map(instance => `
+                <tr>
+                    <td>
+                        ${workerLabel(instance)}
+                        <div class="muted">ID: ${escapeHtml(instance.instance_id)}</div>
+                    </td>
+                    <td>${formatDate(instance.first_detected)}</td>
+                    <td>${formatDate(instance.last_updated)}</td>
+                    <td>${missingBadges(instance.missing_ppe)}</td>
+                    <td class="reason-cell">${instance.review_reason ? escapeHtml(instance.review_reason) : '<span class="muted">No reason recorded</span>'}</td>
+                    <td>${statusBadge(instance.review_status)}</td>
+                    <td>
+                        ${formatDate(instance.review_updated_at)}
+                        ${instance.reviewed_by ? `<div class="muted">By ${escapeHtml(instance.reviewed_by)}</div>` : ''}
+                    </td>
+                    <td><span class="badge info"><i class="fas fa-images"></i>${Number(instance.snapshot_count || 0)}</span></td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn btn-primary" onclick="openSnapshots('${escapeHtml(instance.instance_id)}')"><i class="fas fa-eye"></i> View</button>
+                            <button class="btn btn-secondary" onclick="openReviewModal('${escapeHtml(instance.instance_id)}')"><i class="fas fa-pen"></i> Status</button>
+                            <button class="btn btn-danger" onclick="deleteInstance('${escapeHtml(instance.instance_id)}')"><i class="fas fa-trash"></i> Delete</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openSnapshots(instanceId) {
+            const modal = document.getElementById('snapshotModal');
+            const modalBody = document.getElementById('snapshotModalBody');
+            const modalTitle = document.getElementById('snapshotModalTitle');
+            modal.classList.add('active');
+            modalTitle.textContent = `Violation: ${instanceId}`;
+            modalBody.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading snapshots...</p></div>`;
+
+            adminFetch(`/api/admin/instances/${encodeURIComponent(instanceId)}/snapshots`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || data.error) {
+                        modalBody.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Violation not found</p></div>`;
+                        return;
+                    }
+
+                    const worker = data.worker_name
+                        ? `${data.worker_name} (${data.worker_number || 'No worker number'})`
+                        : (data.worker_number || 'Unknown Worker');
+                    const snapshots = data.snapshots || [];
+                    modalBody.innerHTML = `
+                        <div class="detail-grid">
+                            <div class="detail-item"><div class="detail-label">Worker</div><div class="detail-value">${escapeHtml(worker)}</div></div>
+                            <div class="detail-item"><div class="detail-label">Violation Time</div><div class="detail-value">${formatDate(data.first_detected)}</div></div>
+                            <div class="detail-item"><div class="detail-label">Missing PPE</div><div class="detail-value">${missingBadges(data.missing_ppe)}</div></div>
+                            <div class="detail-item"><div class="detail-label">Review Status</div><div class="detail-value">${statusBadge(data.review_status)}</div></div>
+                            <div class="detail-item"><div class="detail-label">Reason</div><div class="detail-value">${data.review_reason ? escapeHtml(data.review_reason) : '<span class="muted">No reason recorded</span>'}</div></div>
+                            <div class="detail-item"><div class="detail-label">Review Updated</div><div class="detail-value">${formatDate(data.review_updated_at)}</div></div>
+                        </div>
+                        ${snapshots.length ? `
+                            <div class="snapshots-grid">
+                                ${snapshots.map((snapshot, index) => {
+                                    const path = escapeHtml(snapshot.path);
+                                    return `
+                                        <div class="snapshot-item">
+                                            <img src="/${path}" alt="Snapshot ${index + 1}" class="snapshot-image" onclick="window.open('/${path}', '_blank')">
+                                            <div class="snapshot-info">
+                                                <div class="snapshot-number">Snapshot #${index + 1}</div>
+                                                <div class="snapshot-time"><i class="fas fa-clock"></i> ${formatDate(snapshot.timestamp)}</div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : `<div class="empty-state"><i class="fas fa-image"></i><p>No snapshots available for this violation</p></div>`}
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error loading snapshots:', error);
+                    modalBody.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Error loading snapshots</p></div>`;
+                });
+        }
+
+        function openReviewModal(instanceId) {
+            const instance = violationsCache.find(item => item.instance_id === instanceId);
+            if (!instance) return;
+            currentReviewId = instanceId;
+            document.getElementById('reviewInstance').value = `${instance.worker_name || instance.worker_number || 'Unknown Worker'} - ${instanceId}`;
+            document.getElementById('reviewStatus').value = instance.review_status || 'pending';
+            document.getElementById('reviewReason').value = instance.review_reason || '';
+            document.getElementById('reviewedBy').value = instance.reviewed_by || '';
+            document.getElementById('reviewModal').classList.add('active');
+        }
+
+        function closeSnapshotModal() {
+            document.getElementById('snapshotModal').classList.remove('active');
+        }
+
+        function closeReviewModal() {
+            document.getElementById('reviewModal').classList.remove('active');
+            currentReviewId = null;
+        }
+
+        function saveReview(event) {
+            event.preventDefault();
+            if (!currentReviewId) return;
+
+            const payload = {
+                review_status: document.getElementById('reviewStatus').value,
+                review_reason: document.getElementById('reviewReason').value,
+                reviewed_by: document.getElementById('reviewedBy').value
+            };
+
+            adminFetch(`/api/admin/instances/${encodeURIComponent(currentReviewId)}/review`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(async response => {
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.message || 'Failed to update review');
+                    showToast(data.message || 'Review updated');
+                    closeReviewModal();
+                    loadInstances();
+                })
+                .catch(error => {
+                    showToast(error.message || 'Failed to update review', true);
+                });
+        }
+
+        function deleteInstance(instanceId) {
+            if (!confirm('Are you sure you want to delete this violation and all its snapshots?')) return;
+
+            adminFetch(`/api/admin/instances/${encodeURIComponent(instanceId)}`, { method: 'DELETE' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('Violation deleted');
+                        loadInstances();
+                    } else {
+                        showToast(data.error || 'Failed to delete violation', true);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting instance:', error);
+                    showToast('Error deleting violation', true);
+                });
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast${isError ? ' error' : ''}`;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        window.onclick = function(event) {
+            if (event.target === document.getElementById('snapshotModal')) closeSnapshotModal();
+            if (event.target === document.getElementById('reviewModal')) closeReviewModal();
+        };
+
+        loadInstances();
+    </script>
+</body>
+</html>

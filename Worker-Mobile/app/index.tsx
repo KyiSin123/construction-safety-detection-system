@@ -1,0 +1,1 @@
+import {Redirect} from 'expo-router';import {ActivityIndicator,View} from 'react-native';import {useAuth} from '../src/auth';export default function(){const{token,loading}=useAuth();if(loading)return <View style={{flex:1,justifyContent:'center'}}><ActivityIndicator/></View>;return <Redirect href={token?'/violations':'/login'}/>}

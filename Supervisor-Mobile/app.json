@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "PPE Supervisor",
+    "slug": "ppe-supervisor",
+    "scheme": "ppesupervisor",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "817edf0c-6944-4074-87e7-0688ea45278e"
+      },
+      "router": {}
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kyisin.constructionsafety"
+    },
+    "android": {
+      "package": "com.kyisin.constructionsafety",
+      "googleServicesFile": "./google-services.json"
+    },
+    "owner": "kyisin"
+  }
+}

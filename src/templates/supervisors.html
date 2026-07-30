@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supervisor Administration - PPE Detection</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --ink:#172033; --muted:#637083; --line:#dbe1ea; --blue:#1769d1; --red:#b42318; --bg:#f4f6f9; }
+        * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font:14px Arial,sans-serif; }
+        header { background:#fff; border-bottom:1px solid var(--line); } .wrap { max-width:1200px; margin:auto; padding:24px; }
+        h1 { margin:0; font-size:24px; } nav { margin-top:12px; display:flex; gap:16px; flex-wrap:wrap; } nav a { color:var(--muted); text-decoration:none; } nav a.active { color:var(--blue); font-weight:700; }
+        .grid { display:grid; grid-template-columns:360px 1fr; gap:20px; align-items:start; } .panel { background:#fff; border:1px solid var(--line); padding:20px; border-radius:8px; }
+        .panel h2 { margin:0 0 16px; font-size:18px; } label { display:block; font-weight:600; margin:12px 0 6px; }
+        input, select, textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:5px; font:inherit; } textarea { min-height:72px; }
+        button { border:0; border-radius:5px; padding:10px 14px; background:var(--blue); color:#fff; font-weight:600; cursor:pointer; margin-top:16px; } button.secondary { background:#e9eef5; color:var(--ink); margin-left:8px; }
+        table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:12px 8px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-size:12px; }
+        .hidden { display:none; } .message { color:var(--red); margin-top:10px; min-height:18px; } .muted { color:var(--muted); }
+        @media (max-width:800px) { .grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <header><div class="wrap"><h1><i class="fas fa-shield-alt"></i> Supervisor Administration</h1><nav><a href="/"><i class="fas fa-house"></i> Home</a><a href="/admin"><i class="fas fa-gauge-high"></i> Admin dashboard</a><a href="/admin/review"><i class="fas fa-clipboard-list"></i> Violation History</a><a href="/admin/workers"><i class="fas fa-users"></i> Workers</a><a href="/admin/supervisors" class="active"><i class="fas fa-user-shield"></i> Supervisors</a><a href="/admin/settings"><i class="fas fa-gear"></i> Detection Settings</a></nav></div></header>
+    <main class="wrap">
+        <section id="loginPanel" class="panel" style="max-width:360px"><h2>Administrator sign in</h2>
+            <label>Username<input id="loginUsername" autocomplete="username"></label>
+            <label>Password<input id="loginPassword" type="password" autocomplete="current-password"></label>
+            <button onclick="login()">Sign in</button><div id="loginMessage" class="message"></div>
+        </section>
+        <section id="adminPanel" class="grid hidden">
+            <form class="panel" onsubmit="saveSupervisor(event)"><h2 id="formTitle">Add supervisor</h2>
+                <input id="supervisorId" type="hidden"><label>Username<input id="username" required></label><label>Display name<input id="displayName" required></label>
+                <label>Password <span class="muted">(required for new account)</span><input id="password" type="password"></label>
+                <label>Role<select id="role"><option value="supervisor">Supervisor</option><option value="admin">Administrator</option></select></label>
+                <label>Worker numbers <span class="muted">(comma separated)</span><textarea id="workerNumbers" placeholder="A102, A103"></textarea></label>
+                <label>Teams <span class="muted">(comma separated)</span><textarea id="teams" placeholder="Concrete, Electrical"></textarea></label>
+                <label><input id="isActive" type="checkbox" checked style="width:auto"> Active account</label>
+                <button type="submit">Save supervisor</button><button type="button" class="secondary" onclick="clearForm()">Clear</button><div id="formMessage" class="message"></div>
+            </form>
+            <section class="panel"><h2>Supervisor assignments</h2><table><thead><tr><th>Name</th><th>Role</th><th>Workers / teams</th><th></th></tr></thead><tbody id="supervisorRows"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody></table></section>
+        </section>
+    </main>
+    <script>
+        let token = sessionStorage.getItem('supervisor_admin_token'); let supervisors = [];
+        async function api(path, options = {}) { options.headers = {...(options.headers || {}), Authorization: `Bearer ${token}`}; const response = await fetch(path, options); const data = await response.json(); if (!response.ok) throw new Error(data.error || data.message || 'Request failed'); return data; }
+        async function login() { try { const response = await fetch('/api/mobile/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:loginUsername.value,password:loginPassword.value})}); const data = await response.json(); if (!response.ok || data.supervisor.role !== 'admin') throw new Error(data.error || 'Administrator access required'); token = data.access_token; sessionStorage.setItem('supervisor_admin_token', token); loginPanel.classList.add('hidden'); adminPanel.classList.remove('hidden'); loadSupervisors(); } catch (error) { loginMessage.textContent = error.message; } }
+        async function loadSupervisors() { try { supervisors = await api('/api/admin/supervisors'); supervisorRows.innerHTML = supervisors.map((item, index) => `<tr><td><strong>${escapeHtml(item.display_name)}</strong><br><span class="muted">${escapeHtml(item.username)}</span></td><td>${escapeHtml(item.role)}</td><td>${escapeHtml(item.worker_numbers.join(', ') || 'No workers')}<br>${escapeHtml(item.teams.join(', ') || 'No teams')}</td><td><button class="secondary" style="margin:0" onclick="editSupervisor(${index})">Edit</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">No supervisors.</td></tr>'; } catch (error) { supervisorRows.innerHTML = `<tr><td colspan="4" class="message">${escapeHtml(error.message)}</td></tr>`; } }
+        async function saveSupervisor(event) { event.preventDefault(); formMessage.textContent=''; const payload={id:supervisorId.value || undefined,username:username.value,display_name:displayName.value,password:password.value || undefined,role:role.value,is_active:isActive.checked,worker_numbers:workerNumbers.value.split(',').map(v=>v.trim()).filter(Boolean),teams:teams.value.split(',').map(v=>v.trim()).filter(Boolean)}; try { await api('/api/admin/supervisors',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); clearForm(); loadSupervisors(); } catch (error) { formMessage.textContent=error.message; } }
+        function editSupervisor(index) { const item=supervisors[index]; supervisorId.value=item.id; username.value=item.username; displayName.value=item.display_name; password.value=''; role.value=item.role; isActive.checked=item.is_active; workerNumbers.value=item.worker_numbers.join(', '); teams.value=item.teams.join(', '); formTitle.textContent='Edit supervisor'; }
+        function clearForm() { document.querySelector('form').reset(); supervisorId.value=''; isActive.checked=true; formTitle.textContent='Add supervisor'; formMessage.textContent=''; }
+        function escapeHtml(value) { return String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char])); }
+        if (token) { loginPanel.classList.add('hidden'); adminPanel.classList.remove('hidden'); loadSupervisors(); }
+    </script>
+</body>
+</html>

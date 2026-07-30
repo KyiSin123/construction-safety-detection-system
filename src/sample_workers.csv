@@ -1,0 +1,11 @@
+worker_number,name,team,is_active
+W001,Aung Min,Concrete Team,1
+W002,Thura Ko,Steel Team,1
+W003,Min Thu,Electrical Team,1
+W004,Kyaw Zin,Plumbing Team,1
+W005,Htet Aung,Scaffolding Team,1
+W006,Nay Lin,Crane Team,1
+W007,Zaw Myo,Site Cleaning Team,1
+W008,Ko Paing,Painting Team,1
+W009,Ye Htut,Masonry Team,1
+W010,Soe Moe,General Labor Team,1

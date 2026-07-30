@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administrator Site | PPE Safety</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --ink:#172033; --muted:#637083; --line:#dbe1ea; --blue:#1769d1; --red:#b42318; --bg:#f4f6f9; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px Arial,sans-serif; }
+    .wrap { max-width:1200px; margin:0 auto; padding:24px; }
+    .panel { background:#fff; border:1px solid var(--line); border-radius:10px; padding:24px; margin-top:22px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+    .card { display:block; padding:18px; border:1px solid var(--line); border-radius:8px; color:var(--ink); text-decoration:none; font-weight:700; }
+    .card span { display:block; margin-top:8px; color:var(--muted); font-size:13px; font-weight:400; }
+    label { display:block; margin:12px 0 6px; font-weight:700; }
+    input, select { width:100%; padding:10px; border:1px solid var(--line); border-radius:5px; background:#fff; font:inherit; }
+    button { background:var(--blue); color:#fff; border:0; border-radius:5px; padding:11px 16px; font-weight:700; cursor:pointer; font:inherit; }
+    #login button { margin-top:16px; }
+    button:disabled { cursor:wait; opacity:.65; }
+    .error { color:var(--red); margin-top:12px; }
+    .home-button { display:inline-block; margin-bottom:8px; padding:10px 14px; background:#172033; color:#fff; border-radius:6px; text-decoration:none; font-weight:700; }
+    .analytics-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .analytics-heading h2, .analytics-heading p { margin:0; }
+    .analytics-heading p { margin-top:6px; color:var(--muted); }
+    .controls { display:flex; align-items:flex-end; gap:10px; }
+    .controls label { margin:0; color:var(--muted); font-size:13px; }
+    .controls select { min-width:135px; margin-top:5px; }
+    .summary { margin-top:20px; padding:16px 18px; background:#f7faff; border:1px solid #cfe0f7; border-radius:8px; }
+    .summary strong { display:block; margin-top:3px; color:var(--blue); font-size:30px; }
+    .chart-grid { display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-top:18px; }
+    .chart-card { min-width:0; padding:18px; border:1px solid var(--line); border-radius:8px; }
+    .chart-card h3 { margin:0 0 14px; font-size:16px; }
+    .chart-card-wide { grid-column:1 / -1; }
+    .chart-wrap { position:relative; min-height:270px; }
+    .chart-message { display:flex; align-items:center; justify-content:center; position:absolute; inset:0; z-index:2; padding:24px; background:rgba(255,255,255,.94); color:#334155; font-weight:600; text-align:center; }
+    .chart-message[hidden] { display:none; }
+    #analysisStatus { min-height:20px; margin-top:14px; color:var(--muted); }
+    #analysisStatus.error { color:var(--red); }
+    @media (max-width:760px) {
+      .wrap { padding:18px; }
+      .panel { padding:18px; }
+      .chart-grid { grid-template-columns:1fr; }
+      .chart-card-wide { grid-column:auto; }
+      .controls { width:100%; }
+      .controls label { flex:1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="home-button" href="/"><i class="fas fa-house"></i> Home</a>
+    <h1>Construction Administrator Site</h1>
+    <p>Manage workers, administrator and supervisor accounts, detection settings, and audit history. Supervisors receive and resolve alerts in the mobile app.</p>
+
+    <section id="login" class="panel">
+      <h2>Administrator sign in</h2>
+      <label>Username<input id="username" autocomplete="username"></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password"></label>
+      <button onclick="signIn()">Sign in</button>
+      <div id="error" class="error"></div>
+    </section>
+
+    <section id="dashboard" class="panel" hidden>
+      <h2>Administration</h2>
+      <div class="grid">
+        <a class="card" href="/admin/workers">Worker registry<span>Register IDs used for attendance and identity checks.</span></a>
+        <!-- <a class="card" href="/admin/attendance">Attendance<span>Check workers in or out using their registered ID.</span></a> -->
+        <a class="card" href="/admin/supervisors">Supervisor accounts<span>Create accounts and assign workers or teams.</span></a>
+        <a class="card" href="/admin/settings">Detection settings<span>Configure PPE and detection timing.</span></a>
+        <a class="card" href="/admin/review">Violation history<span>Audit detections and resolved records.</span></a>
+      </div>
+
+      <section class="panel" aria-labelledby="analysisTitle">
+        <div class="analytics-heading">
+          <div>
+            <h2 id="analysisTitle">Detection analysis</h2>
+            <p id="analysisRange">Recent persisted violations</p>
+          </div>
+          <div class="controls">
+            <label for="analysisDays">Date range
+              <select id="analysisDays" onchange="loadAnalysis()">
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+              </select>
+            </label>
+            <button id="refreshAnalysis" type="button" onclick="loadAnalysis()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="summary">
+          Total detections
+          <strong id="totalViolations">—</strong>
+        </div>
+
+        <div class="chart-grid">
+          <article class="chart-card chart-card-wide">
+            <h3>Daily violations</h3>
+            <div class="chart-wrap">
+              <canvas id="dailyChart"></canvas>
+              <div id="dailyMessage" class="chart-message">Loading analysis…</div>
+            </div>
+          </article>
+          <article class="chart-card">
+            <h3>Violations by time of day</h3>
+            <div class="chart-wrap">
+              <canvas id="hourlyChart"></canvas>
+              <div id="hourlyMessage" class="chart-message">Loading analysis…</div>
+            </div>
+          </article>
+          <article class="chart-card">
+            <h3>Review status</h3>
+            <div class="chart-wrap">
+              <canvas id="statusChart"></canvas>
+              <div id="statusMessage" class="chart-message">Loading analysis…</div>
+            </div>
+          </article>
+        </div>
+        <div id="analysisStatus" role="status"></div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const loginPanel = document.getElementById('login');
+    const dashboardPanel = document.getElementById('dashboard');
+    const loginError = document.getElementById('error');
+    const charts = {};
+    const saved = sessionStorage.getItem('supervisor_admin_token');
+
+    function showDashboard() {
+      loginPanel.hidden = true;
+      dashboardPanel.hidden = false;
+      loadAnalysis();
+    }
+
+    if (saved) showDashboard();
+
+    async function signIn() {
+      loginError.textContent = '';
+      try {
+        const response = await fetch('/api/mobile/auth/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({username: username.value, password: password.value})
+        });
+        const data = await response.json();
+        if (!response.ok || data.supervisor.role !== 'admin') {
+          throw new Error(data.error || 'Administrator access required');
+        }
+        sessionStorage.setItem('supervisor_admin_token', data.access_token);
+        showDashboard();
+      } catch (error) {
+        loginError.textContent = error.message;
+      }
+    }
+
+    function setChartMessage(id, message) {
+      const element = document.getElementById(id);
+      element.textContent = message || '';
+      element.hidden = !message;
+    }
+
+    function destroyCharts() {
+      Object.keys(charts).forEach(key => {
+        charts[key].destroy();
+        delete charts[key];
+      });
+    }
+
+    function chartOptions(showLegend = false) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: showLegend,
+            position: 'bottom',
+            labels: {
+              color: '#172033',
+              font: {size: 13, weight: '600'},
+              padding: 18,
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            backgroundColor: '#172033',
+            padding: 12
+          }
+        },
+        scales: showLegend ? undefined : {
+          y: {
+            beginAtZero: true,
+            ticks: {precision: 0, color: '#334155', font: {size: 12, weight: '600'}},
+            grid: {color: '#dbe1ea'}
+          },
+          x: {
+            ticks: {color: '#334155', font: {size: 12, weight: '600'}, maxRotation: 45},
+            grid: {display: false}
+          }
+        }
+      };
+    }
+
+    function renderAnalysis(data) {
+      destroyCharts();
+      document.getElementById('totalViolations').textContent = data.total_violations;
+      document.getElementById('analysisRange').textContent = `${data.start_date} to ${data.end_date}`;
+
+      const hasDailyData = data.daily.some(item => item.count > 0);
+      setChartMessage('dailyMessage', hasDailyData ? '' : 'No detections in this date range.');
+      charts.daily = new Chart(document.getElementById('dailyChart'), {
+        type: 'line',
+        data: {
+          labels: data.daily.map(item => item.date),
+          datasets: [{
+            label: 'Violations',
+            data: data.daily.map(item => item.count),
+            borderColor: '#0047cc',
+            backgroundColor: 'rgba(0,71,204,.22)',
+            pointBackgroundColor: '#0047cc',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            borderWidth: 3,
+            fill: true,
+            tension: .25
+          }]
+        },
+        options: chartOptions()
+      });
+
+      const activeHourlyCounts = data.hourly.filter(item => item.count > 0).map(item => item.count);
+      const peakCount = activeHourlyCounts.length ? Math.max(...activeHourlyCounts) : 0;
+      const quietCount = activeHourlyCounts.length ? Math.min(...activeHourlyCounts) : 0;
+      setChartMessage('hourlyMessage', activeHourlyCounts.length ? '' : 'No detections by time in this date range.');
+      charts.hourly = new Chart(document.getElementById('hourlyChart'), {
+        type: 'bar',
+        data: {
+          labels: data.hourly.map(item => {
+            const hour = item.hour % 12 || 12;
+            return `${hour} ${item.hour < 12 ? 'AM' : 'PM'}`;
+          }),
+          datasets: [{
+            label: 'Violations',
+            data: data.hourly.map(item => item.count),
+            backgroundColor: data.hourly.map(item => {
+              if (!item.count) return '#cbd5e1';
+              if (item.count === peakCount) return '#c62828';
+              if (item.count === quietCount) return '#008a3b';
+              return '#0057d9';
+            }),
+            borderColor: '#ffffff',
+            borderWidth: 2
+          }]
+        },
+        options: chartOptions()
+      });
+
+      const visibleStatuses = data.review_statuses.filter(item => item.count > 0);
+      setChartMessage('statusMessage', visibleStatuses.length ? '' : 'No review data in this date range.');
+      charts.status = new Chart(document.getElementById('statusChart'), {
+        type: 'doughnut',
+        data: {
+          labels: visibleStatuses.map(item => item.label.replace('_', ' ')),
+          datasets: [{
+            data: visibleStatuses.map(item => item.count),
+            backgroundColor: ['#f57c00', '#6a1b9a', '#008a3b', '#455a64', '#c62828'],
+            borderColor: '#ffffff',
+            borderWidth: 3,
+            hoverOffset: 8
+          }]
+        },
+        options: chartOptions(true)
+      });
+    }
+
+    async function loadAnalysis() {
+      const status = document.getElementById('analysisStatus');
+      const refresh = document.getElementById('refreshAnalysis');
+      const token = sessionStorage.getItem('supervisor_admin_token');
+      const days = document.getElementById('analysisDays').value;
+      status.className = '';
+      status.textContent = 'Loading detection analysis…';
+      refresh.disabled = true;
+
+      if (typeof Chart === 'undefined') {
+        status.className = 'error';
+        status.textContent = 'Charts could not load. Check the network connection and refresh the page.';
+        refresh.disabled = false;
+        ['dailyMessage', 'hourlyMessage', 'statusMessage'].forEach(id => setChartMessage(id, 'Chart library unavailable.'));
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/admin/detection-analysis?days=${encodeURIComponent(days)}`, {
+          headers: {Authorization: `Bearer ${token}`}
+        });
+        if (response.status === 401 || response.status === 403) {
+          sessionStorage.removeItem('supervisor_admin_token');
+          destroyCharts();
+          dashboardPanel.hidden = true;
+          loginPanel.hidden = false;
+          loginError.textContent = 'Your administrator session expired. Please sign in again.';
+          return;
+        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to load detection analysis');
+        renderAnalysis(data);
+        status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = error.message;
+        ['dailyMessage', 'hourlyMessage', 'statusMessage'].forEach(id => setChartMessage(id, 'Analysis unavailable.'));
+      } finally {
+        refresh.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

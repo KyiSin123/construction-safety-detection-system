@@ -1,0 +1,24 @@
+# Dependencies are installed by EAS from package.json and package-lock.json.
+node_modules/
+
+# Local Expo state and generated build output.
+.expo/
+.expo-shared/
+dist/
+web-build/
+coverage/
+
+# Local configuration and logs. Keep the committed example file.
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# Generated Android artifacts and local credential exports.
+*.apk
+*.aab
+credentials.json
+
+# Version-control metadata is not needed by the remote build.
+.git/

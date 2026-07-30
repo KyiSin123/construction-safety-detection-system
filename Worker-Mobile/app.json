@@ -1,0 +1,1 @@
+{"expo":{"name":"PPE Worker","slug":"ppe-worker","scheme":"ppeworker","plugins":["expo-router","expo-secure-store","expo-notifications",["expo-image-picker",{"photosPermission":"Allow PPE Worker to select proof photos.","cameraPermission":"Allow PPE Worker to take a proof photo."}]],"android":{"package":"com.kyisin.ppeworker"}}}

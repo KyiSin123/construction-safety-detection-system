@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workers - PPE Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #f8f9fb;
+            --bg-secondary: #ffffff;
+            --text-primary: #1a202c;
+            --text-secondary: #718096;
+            --accent-blue: #4a90e2;
+            --accent-green: #48bb78;
+            --accent-red: #e65c5c;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        header {
+            background: var(--bg-secondary);
+            padding: 20px 0;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 32px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        header h1 {
+            font-size: 26px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .nav-links { margin-top: 12px; display: flex; gap: 20px; flex-wrap: wrap; }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .nav-links a.active {
+            color: var(--accent-blue);
+            border-bottom: 2px solid var(--accent-blue);
+            padding-bottom: 2px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 24px;
+        }
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .form-group { margin-bottom: 16px; }
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .checkbox-row input { width: auto; }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Poppins', sans-serif;
+        }
+        .btn-primary { background: var(--accent-blue); color: white; }
+        .btn-danger { background: var(--accent-red); color: white; }
+        .btn-secondary {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status.active { background: rgba(72, 187, 120, 0.12); color: var(--accent-green); }
+        .status.inactive { background: rgba(230, 92, 92, 0.12); color: var(--accent-red); }
+        .muted { color: var(--text-secondary); }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 14px 18px;
+            border-radius: 8px;
+            color: white;
+            background: var(--accent-green);
+            box-shadow: var(--shadow-md);
+            display: none;
+        }
+        .toast.error { background: var(--accent-red); }
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-shield-alt"></i> Smart Helmet Detection System</h1>
+            <div class="nav-links">
+                <a href="/"><i class="fas fa-house"></i> Home</a>
+                <a href="/admin"><i class="fas fa-gauge-high"></i> Admin dashboard</a>
+                <a href="/admin/review"><i class="fas fa-clipboard-list"></i> Violation History</a>
+                <a href="/admin/workers" class="active"><i class="fas fa-users"></i> Workers</a>
+                <!-- <a href="/admin/attendance"><i class="fas fa-calendar-check"></i> Attendance</a> -->
+                <a href="/admin/supervisors"><i class="fas fa-user-shield"></i> Supervisors</a>
+                <a href="/admin/settings"><i class="fas fa-gear"></i> Detection Settings</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="grid">
+            <div class="card">
+                <div class="card-title"><i class="fas fa-user-plus"></i> Register Worker</div>
+                <form id="workerForm" onsubmit="saveWorker(event)">
+                    <div class="form-group">
+                        <label for="workerNumber">Worker Number</label>
+                        <input id="workerNumber" required placeholder="A102">
+                    </div>
+                    <div class="form-group">
+                        <label for="workerName">Name</label>
+                        <input id="workerName" required placeholder="Worker name">
+                    </div>
+                    <div class="form-group">
+                        <label for="team">Team</label>
+                        <input id="team" placeholder="Concrete team">
+                    </div>
+                    <div class="form-group">
+                        <label for="workerPassword">Worker app password <span class="muted">(set or reset)</span></label>
+                        <input id="workerPassword" type="password" placeholder="Leave blank to keep the current password">
+                    </div>
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="isActive" checked>
+                        <label for="isActive" style="margin: 0;">Active worker</label>
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Save Worker</button>
+                        <button class="btn btn-secondary" type="button" onclick="clearForm()">Clear</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title"><i class="fas fa-users"></i> Worker Registry</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Name</th>
+                            <th>Team</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workersTable">
+                        <tr><td colspan="5" class="muted">Loading workers...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        let workersCache = [];
+        const adminToken = sessionStorage.getItem('supervisor_admin_token');
+        if (!adminToken) window.location.replace('/admin');
+        function adminFetch(path, options = {}) {
+            options.headers = { ...(options.headers || {}), Authorization: `Bearer ${adminToken}` };
+            return fetch(path, options);
+        }
+
+        function loadWorkers() {
+            adminFetch('/api/admin/workers')
+                .then(response => response.json())
+                .then(workers => {
+                    workersCache = workers;
+                    const table = document.getElementById('workersTable');
+                    if (!workers.length) {
+                        table.innerHTML = '<tr><td colspan="5" class="muted">No workers registered yet.</td></tr>';
+                        return;
+                    }
+                    table.innerHTML = workers.map(worker => `
+                        <tr>
+                            <td><strong>${escapeHtml(worker.worker_number)}</strong></td>
+                            <td>${escapeHtml(worker.name)}</td>
+                            <td>${escapeHtml(worker.team || '')}</td>
+                            <td><span class="status ${worker.is_active ? 'active' : 'inactive'}">${worker.is_active ? 'Active' : 'Inactive'}</span></td>
+                            <td>
+                                <div class="actions">
+                                    <button class="btn btn-secondary" onclick="editWorker(${workers.indexOf(worker)})">Edit</button>
+                                    <button class="btn btn-danger" onclick="deleteWorker('${encodeURIComponent(worker.worker_number)}')">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        function saveWorker(event) {
+            event.preventDefault();
+            const payload = {
+                worker_number: document.getElementById('workerNumber').value,
+                name: document.getElementById('workerName').value,
+                team: document.getElementById('team').value,
+                password: document.getElementById('workerPassword').value,
+                is_active: document.getElementById('isActive').checked
+            };
+
+            adminFetch('/api/admin/workers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                showToast(data.message || 'Saved', ok ? 'success' : 'error');
+                if (ok) {
+                    clearForm();
+                    loadWorkers();
+                }
+            });
+        }
+
+        function editWorker(index) {
+            const worker = workersCache[index];
+            if (!worker) {
+                return;
+            }
+            document.getElementById('workerNumber').value = worker.worker_number || '';
+            document.getElementById('workerName').value = worker.name || '';
+            document.getElementById('team').value = worker.team || '';
+            document.getElementById('workerPassword').value = '';
+            document.getElementById('isActive').checked = Boolean(worker.is_active);
+        }
+
+        function deleteWorker(workerNumber) {
+            if (!confirm('Delete this worker? Existing violation history will remain.')) {
+                return;
+            }
+            adminFetch(`/api/admin/workers/${workerNumber}`, { method: 'DELETE' })
+                .then(response => response.json())
+                .then(data => {
+                    showToast(data.message || 'Deleted', data.status === 'success' ? 'success' : 'error');
+                    loadWorkers();
+                });
+        }
+
+        function clearForm() {
+            document.getElementById('workerForm').reset();
+            document.getElementById('isActive').checked = true;
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast' + (type === 'error' ? ' error' : '');
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[char]));
+        }
+
+        loadWorkers();
+    </script>
+</body>
+</html>
