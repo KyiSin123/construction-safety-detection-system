@@ -1,0 +1,85 @@
+# Local environments and secrets
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python caches, tests, and tooling
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Runtime data produced by the detection server
+src/snapshots/
+src/worker_proofs/
+src/detections.db
+src/*.sqlite
+src/*.sqlite3
+src/settings.json
+src/instance_counter.json
+*.db-journal
+*.db-shm
+*.db-wal
+
+# JavaScript / Expo dependencies and generated state
+node_modules/
+**/node_modules/
+.expo/
+**/.expo/
+.expo-shared/
+expo-env.d.ts
+dist/
+build/
+web-build/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Native mobile builds and signing/service credentials
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+google-services.json
+GoogleService-Info.plist
+*.jks
+*.keystore
+
+# Large machine-learning data and generated training artifacts
+Model-Training/Dataset/
+Model-Training/Outputs/
+Model-Training/source_files/
+Model-Training/Outputstraining_log_df.csv
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+
+Model-Testing/*
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local notes
+bugs.txt
