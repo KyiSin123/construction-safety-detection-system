@@ -70,6 +70,8 @@ Model-Training/Outputstraining_log_df.csv
 *.engine
 *.tflite
 
+Model-Training/*
+
 Model-Testing/*
 
 # Editor and operating-system files

@@ -27,7 +27,7 @@ def seed(db):
     if supervisor:
         c.execute('''INSERT IGNORE INTO supervisor_worker_assignments(supervisor_id,worker_number)
             VALUES(%s,%s)''',(supervisor[0],WORKER_NUMBER))
-    records=[(1,'helmet','pending'),(3,'vest','worker_submitted'),(8,'mask','resolved'),(15,'helmet,vest','ignored')]
+    records=[(1,'helmet','pending'),(3,'vest','worker_submitted'),(8,'mask','resolved'),(15,'helmet,vest','resolved')]
     for index,(days,ppe,status) in enumerate(records,1):
         detected=now-timedelta(days=days)
         c.execute('''INSERT INTO instances(instance_id,first_detected,last_updated,is_compliant,missing_ppe,
@@ -39,9 +39,9 @@ def seed(db):
             worker_team=VALUES(worker_team),identity_status='confirmed',review_status=VALUES(review_status),
             review_reason=VALUES(review_reason),reviewed_by=VALUES(reviewed_by),review_updated_at=VALUES(review_updated_at)''',
             (f'{INSTANCE_PREFIX}{index:03d}',detected,detected,ppe,WORKER_NUMBER,status,
-             'Demo supervisor review' if status in {'resolved','ignored'} else None,
-             'Demo Supervisor' if status in {'resolved','ignored'} else None,
-             detected if status in {'resolved','ignored'} else None))
+             'Demo supervisor review' if status == 'resolved' else None,
+             'Demo Supervisor' if status == 'resolved' else None,
+             detected if status == 'resolved' else None))
     for days in (1,2,3,5,8):
         day=(now-timedelta(days=days)).date()
         check_in=datetime.combine(day,datetime.min.time()).replace(hour=8)

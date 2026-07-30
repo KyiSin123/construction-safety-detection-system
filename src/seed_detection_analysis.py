@@ -14,18 +14,18 @@ DEMO_RECORDS = (
     (0, 'helmet', 'pending'),
     (0, 'helmet,vest', 'worker_submitted'),
     (1, 'vest', 'resolved'),
-    (2, 'mask', 'ignored'),
+    (2, 'mask', 'resolved'),
     (3, 'helmet,mask', 'pending'),
     (4, 'boots', 'resolved'),
     (6, 'helmet', 'worker_submitted'),
     (8, 'vest,gloves', 'pending'),
     (12, 'helmet', 'resolved'),
-    (20, 'mask,vest', 'ignored'),
+    (20, 'mask,vest', 'resolved'),
     (29, 'gloves', 'pending'),
     (31, 'helmet,boots', 'resolved'),
     (45, 'vest', 'worker_submitted'),
     (60, 'helmet,mask,vest', 'pending'),
-    (89, 'boots', 'ignored'),
+    (89, 'boots', 'resolved'),
     (91, 'helmet', 'resolved'),
 )
 
@@ -84,7 +84,7 @@ def seed(db):
                 review_status,
                 'Generated for dashboard testing',
                 'Demo Administrator',
-                detected_at if review_status in {'resolved', 'ignored'} else None,
+                detected_at if review_status == 'resolved' else None,
             ),
         )
 

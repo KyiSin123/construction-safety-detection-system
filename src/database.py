@@ -16,7 +16,7 @@ INSTANCE_IDENTITY_COLUMNS = {
     'notification_error': 'TEXT',
 }
 INSTANCE_REVIEW_COLUMNS = {
-    'review_status': "ENUM('pending', 'worker_submitted', 'resolved', 'ignored') DEFAULT 'pending'",
+    'review_status': "ENUM('pending', 'worker_submitted', 'resolved') DEFAULT 'pending'",
     'review_reason': 'TEXT',
     'reviewed_by': 'VARCHAR(255)',
     'review_updated_at': 'DATETIME',
@@ -26,8 +26,8 @@ INSTANCE_ASSIGNMENT_COLUMNS = {
     'assigned_by_name': 'VARCHAR(255) NULL',
     'assigned_at': 'DATETIME NULL',
 }
-REVIEW_STATUSES = {'pending', 'worker_submitted', 'resolved', 'ignored'}
-BLOCKING_REVIEW_STATUSES = {'pending', 'ignored'}
+REVIEW_STATUSES = {'pending', 'worker_submitted', 'resolved'}
+BLOCKING_REVIEW_STATUSES = {'pending', 'worker_submitted'}
 
 
 class Database:
@@ -209,6 +209,20 @@ class Database:
             ''')
 
             c.execute('''
+                CREATE TABLE IF NOT EXISTS worker_proof_submissions (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    instance_id VARCHAR(255) NOT NULL,
+                    worker_number VARCHAR(64) NOT NULL,
+                    comment TEXT NOT NULL,
+                    proof_path TEXT NOT NULL,
+                    submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (instance_id) REFERENCES instances(instance_id) ON DELETE CASCADE,
+                    FOREIGN KEY (worker_number) REFERENCES workers(worker_number) ON DELETE CASCADE,
+                    INDEX worker_proof_instance (instance_id, submitted_at)
+                )
+            ''')
+
+            c.execute('''
                 CREATE TABLE IF NOT EXISTS attendance_records (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     worker_number VARCHAR(64) NOT NULL,
@@ -281,9 +295,10 @@ class Database:
             if column not in existing_columns:
                 cursor.execute(f'ALTER TABLE instances ADD COLUMN {column} {column_type}')
         if 'review_status' in existing_columns:
+            cursor.execute("UPDATE instances SET review_status = 'resolved' WHERE review_status = 'ignored'")
             cursor.execute(
                 "ALTER TABLE instances MODIFY COLUMN review_status "
-                "ENUM('pending', 'worker_submitted', 'resolved', 'ignored') DEFAULT 'pending'"
+                "ENUM('pending', 'worker_submitted', 'resolved') DEFAULT 'pending'"
             )
 
     def _ensure_violation_notification_columns(self, cursor):
@@ -337,7 +352,7 @@ class Database:
         return ','.join(self._normalize_missing_ppe(missing_ppe))
 
     def find_blocking_violation(self, missing_ppe, identity=None):
-        """Return an unresolved matching violation id, if pending/ignored should block storage."""
+        """Block a duplicate open violation only within the current calendar date."""
         try:
             normalized_missing_ppe = self._normalize_missing_ppe(missing_ppe)
             if not normalized_missing_ppe:
@@ -356,6 +371,7 @@ class Database:
                     FROM instances
                     WHERE is_compliant = 0
                       AND review_status IN (%s, %s)
+                      AND DATE(first_detected) = CURDATE()
                       AND worker_number = %s
                     ORDER BY first_detected ASC
                 ''', (*blocking_statuses, worker_number))
@@ -365,6 +381,7 @@ class Database:
                     FROM instances
                     WHERE is_compliant = 0
                       AND review_status IN (%s, %s)
+                      AND DATE(first_detected) = CURDATE()
                       AND (worker_number IS NULL OR worker_number = '')
                     ORDER BY first_detected ASC
                 ''', blocking_statuses)
@@ -558,7 +575,7 @@ class Database:
 
             review_statuses = [
                 {'label': status, 'count': status_counts.get(status, 0)}
-                for status in ('pending', 'worker_submitted', 'resolved', 'ignored')
+                for status in ('pending', 'worker_submitted', 'resolved')
             ]
             known_statuses = {item['label'] for item in review_statuses}
             review_statuses.extend(
@@ -606,7 +623,14 @@ class Database:
             c = conn.cursor()
 
             query = '''
-                SELECT i.*, COALESCE(s.snapshot_count, 0) as snapshot_count
+                SELECT i.id, i.instance_id, i.first_detected, i.last_updated,
+                       i.is_compliant, i.missing_ppe, i.detected_ppe,
+                       i.worker_number, i.worker_name, i.worker_team,
+                       i.identity_confidence, i.identity_status,
+                       i.identity_source, i.identity_raw_response,
+                       i.notification_status, i.notification_error,
+                       i.review_status, i.review_reason, i.reviewed_by,
+                       i.review_updated_at, COALESCE(s.snapshot_count, 0) AS snapshot_count
                 FROM instances i
                 LEFT JOIN (
                     SELECT instance_id, COUNT(*) as snapshot_count
@@ -716,7 +740,7 @@ class Database:
             reviewed_by = str(reviewed_by or '').strip() or None
 
             if review_status not in REVIEW_STATUSES:
-                return False, 'Review status must be pending, resolved, or ignored'
+                return False, 'Review status must be pending, worker_submitted, or resolved'
 
             conn = self._connect()
             c = conn.cursor()
@@ -730,18 +754,26 @@ class Database:
                 conn.close()
                 return False, 'Instance not found'
 
-            missing_ppe = [item.strip().lower() for item in (row[0] or '').split(',') if item.strip()]
-            if review_status == 'ignored' and not review_reason:
-                c.close()
-                conn.close()
-                return False, 'Review reason is required when ignoring a violation'
-            if review_status == 'resolved' and 'helmet' in missing_ppe and not review_reason:
-                c.close()
-                conn.close()
-                return False, 'Helmet reason is required before resolving this violation'
-            if review_status == 'resolved' and 'helmet' in missing_ppe and (row[1] != 'worker_submitted' or not row[2]):
+            previous_status = row[1] or 'pending'
+            if previous_status == 'resolved':
                 c.close(); conn.close()
-                return False, 'Worker acknowledgement and proof photo are required before resolving this helmet violation'
+                return False, 'Resolved violations are read-only'
+            if review_status == 'worker_submitted':
+                c.close(); conn.close()
+                return False, 'Only a worker proof submission can set worker_submitted status'
+            if review_status == 'resolved' and previous_status == 'pending' and not review_reason:
+                c.close()
+                conn.close()
+                return False, 'A reason is required when resolving directly'
+            if review_status == 'resolved' and previous_status == 'worker_submitted' and not row[2]:
+                c.close(); conn.close()
+                return False, 'Worker proof is required before approval'
+            if review_status == 'pending' and previous_status == 'worker_submitted' and not review_reason:
+                c.close(); conn.close()
+                return False, 'A reason is required when requesting new proof'
+            if review_status == previous_status:
+                c.close(); conn.close()
+                return False, 'Choose a valid review action'
 
             c.execute('''
                 UPDATE instances
@@ -755,7 +787,7 @@ class Database:
                 INSERT INTO violation_review_events (
                     instance_id, previous_status, review_status, review_reason, reviewer_name
                 ) VALUES (%s, %s, %s, %s, %s)
-            ''', (instance_id, row[1] or 'pending', review_status, review_reason or None, reviewed_by))
+            ''', (instance_id, previous_status, review_status, review_reason or None, reviewed_by))
             conn.commit()
             c.close()
             conn.close()
@@ -1173,17 +1205,39 @@ class Database:
                            WHEN FIND_IN_SET('helmet', LOWER(i.missing_ppe)) > 0 THEN 2
                            ELSE 3
                        END AS alert_priority,
-                       n.is_read, n.read_at
+                       n.is_read, n.read_at, i.worker_proof_at
                 FROM violation_notifications n
                 JOIN instances i ON i.instance_id = n.instance_id
-                WHERE n.supervisor_id = %s AND (i.review_status = %s OR (%s = 'pending' AND i.review_status = 'worker_submitted'))
+                WHERE n.supervisor_id = %s AND i.review_status = %s
                 ORDER BY alert_priority ASC, i.first_detected DESC
-            ''', (supervisor_id, status, status))
+            ''', (supervisor_id, status))
             rows = c.fetchall(); c.close(); conn.close()
             return [self._mobile_violation_from_row(row) for row in rows]
         except Exception as e:
             print(f"Error getting mobile violations: {e}")
             return []
+
+    def get_mobile_violation_counts(self, supervisor_id):
+        try:
+            self.ensure_unknown_violation_access(supervisor_id)
+            conn = self._connect(); c = conn.cursor()
+            c.execute('''
+                SELECT i.review_status, COUNT(DISTINCT i.instance_id)
+                FROM violation_notifications n
+                JOIN instances i ON i.instance_id = n.instance_id
+                WHERE n.supervisor_id = %s
+                  AND i.review_status IN ('pending', 'worker_submitted', 'resolved')
+                GROUP BY i.review_status
+            ''', (supervisor_id,))
+            counts = {'pending': 0, 'worker_submitted': 0, 'resolved': 0}
+            for status, count in c.fetchall():
+                if status in counts:
+                    counts[status] = count
+            c.close(); conn.close()
+            return counts
+        except Exception as e:
+            print(f"Error getting mobile violation counts: {e}")
+            return {'pending': 0, 'worker_submitted': 0, 'resolved': 0}
 
     def get_mobile_violation_detail(self, supervisor_id, instance_id):
         try:
@@ -1227,6 +1281,11 @@ class Database:
                 'status': delivery[0], 'error': delivery[1],
                 'notified_at': self._format_datetime(delivery[2]),
             } if delivery else None
+            c.execute('''SELECT worker_comment, worker_proof_at
+                         FROM instances WHERE instance_id = %s''', (instance_id,))
+            proof = c.fetchone()
+            result['worker_comment'] = proof[0] if proof else None
+            result['worker_proof_at'] = self._format_datetime(proof[1]) if proof else None
             c.execute('SELECT id, timestamp FROM snapshots WHERE instance_id = %s ORDER BY timestamp ASC', (instance_id,))
             result['snapshots'] = [{'id': value[0], 'timestamp': self._format_datetime(value[1])} for value in c.fetchall()]
             c.execute('''SELECT previous_status, review_status, review_reason, reviewer_name, created_at
@@ -1292,22 +1351,32 @@ class Database:
         supervisor_id = supervisor.get('id')
         try:
             conn = self._connect(); c = conn.cursor()
-            c.execute('''SELECT 1 FROM violation_notifications WHERE supervisor_id = %s AND instance_id = %s''',
+            c.execute('''SELECT i.worker_number, i.identity_status
+                         FROM violation_notifications n
+                         JOIN instances i ON i.instance_id = n.instance_id
+                         WHERE n.supervisor_id = %s AND n.instance_id = %s''',
                       (supervisor_id, instance_id))
-            allowed = c.fetchone() is not None
+            violation = c.fetchone()
             c.close(); conn.close()
-            if not allowed:
-                return False, 'This violation is not assigned to you'
+            if not violation:
+                return False, 'This violation is not assigned to you', None
             ok, message = self.update_instance_review(instance_id, review_status, review_reason, supervisor.get('display_name'))
             if ok:
                 conn = self._connect(); c = conn.cursor()
                 c.execute('''UPDATE violation_review_events SET supervisor_id = %s
                              WHERE instance_id = %s ORDER BY id DESC LIMIT 1''', (supervisor_id, instance_id))
+                action = {'review_status': str(review_status).strip().lower()}
+                if action['review_status'] == 'pending':
+                    c.execute('''SELECT d.expo_push_token
+                                 FROM instances i JOIN worker_devices d ON d.worker_number=i.worker_number
+                                 WHERE i.instance_id=%s AND d.is_active=1''', (instance_id,))
+                    action['worker_tokens'] = [row[0] for row in c.fetchall()]
                 conn.commit(); c.close(); conn.close()
-            return ok, message
+                return True, message, action
+            return False, message, None
         except Exception as e:
             print(f"Error updating mobile review: {e}")
-            return False, str(e)
+            return False, str(e), None
 
     def _supervisor_from_row(self, row):
         return {
@@ -1327,7 +1396,8 @@ class Database:
             'review_updated_at': self._format_datetime(row[12]), 'delivery_status': row[13],
             'notified_at': self._format_datetime(row[14]), 'snapshot_count': row[15],
             'alert_priority': row[16], 'is_read': bool(row[17]),
-            'read_at': self._format_datetime(row[18])
+            'read_at': self._format_datetime(row[18]),
+            'worker_proof_at': self._format_datetime(row[19]) if len(row) > 19 else None,
         }
 
     def record_attendance(self, worker_number, action, recorded_by=None, recorded_at=None, reason=None):
@@ -1498,6 +1568,21 @@ class Database:
             return {'items':items,'page':page,'per_page':per_page,'total':total,'has_more':page*per_page<total}
         except Exception as e: print(f'Error getting worker violations: {e}'); return {'items':[],'page':1,'per_page':20,'total':0,'has_more':False}
 
+    def worker_violation_counts(self, worker_number):
+        try:
+            conn=self._connect(); c=conn.cursor()
+            c.execute('''SELECT review_status,COUNT(*) FROM instances
+                WHERE worker_number=%s AND identity_status='confirmed'
+                  AND review_status IN ('pending','worker_submitted','resolved')
+                GROUP BY review_status''',(worker_number,))
+            counts={'pending':0,'worker_submitted':0,'resolved':0}
+            for status,count in c.fetchall():
+                if status in counts: counts[status]=count
+            c.close(); conn.close(); return counts
+        except Exception as e:
+            print(f'Error getting worker violation counts: {e}')
+            return {'pending':0,'worker_submitted':0,'resolved':0}
+
     def worker_attendance(self, worker_number, page=1, per_page=20, month=None, attendance_date=None):
         try:
             page,per_page=self._page_values(page,per_page); clauses=['a.worker_number=%s']; params=[worker_number]
@@ -1636,7 +1721,14 @@ class Database:
                 WHERE instance_id=%s AND worker_number=%s AND identity_status='confirmed' ''',
                 (instance_id,worker_number)); row=c.fetchone()
             if not row or row[0] != 'pending': c.close(); conn.close(); return False,'This alert cannot accept a worker submission'
-            c.execute('''UPDATE instances SET review_status='worker_submitted', worker_acknowledged_at=CURRENT_TIMESTAMP, worker_comment=%s, worker_proof_path=%s, worker_proof_at=CURRENT_TIMESTAMP WHERE instance_id=%s''',(comment,proof_path,instance_id))
+            c.execute('''INSERT INTO worker_proof_submissions
+                (instance_id,worker_number,comment,proof_path)
+                VALUES(%s,%s,%s,%s)''',(instance_id,worker_number,comment,proof_path))
+            c.execute('''UPDATE instances SET review_status='worker_submitted',
+                worker_acknowledged_at=CURRENT_TIMESTAMP, worker_comment=%s,
+                worker_proof_path=%s, worker_proof_at=CURRENT_TIMESTAMP,
+                review_reason=NULL, reviewed_by=NULL, review_updated_at=NULL
+                WHERE instance_id=%s''',(comment,proof_path,instance_id))
             c.execute('''INSERT INTO violation_review_events(instance_id,previous_status,review_status,review_reason,reviewer_name) VALUES(%s,'pending','worker_submitted',%s,%s)''',(instance_id,comment,worker_number)); conn.commit(); c.close(); conn.close(); return True,'Proof submitted for supervisor review'
         except Exception as e: print(f'Error submitting worker proof: {e}'); return False,str(e)
 

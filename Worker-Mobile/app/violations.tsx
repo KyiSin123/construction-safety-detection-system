@@ -1,3 +1,142 @@
-import{useCallback,useEffect,useState}from'react';import{ActivityIndicator,Pressable,RefreshControl,ScrollView,StyleSheet,Text,View}from'react-native';import{useRouter}from'expo-router';import{api,Violation}from'../src/api';import{useAuth}from'../src/auth';import{WorkerNav}from'../src/WorkerNav';
-const statuses=['','pending','worker_submitted','resolved','ignored'];
-export default function(){const{token,worker}=useAuth(),router=useRouter();const[items,setItems]=useState<Violation[]>([]),[status,setStatus]=useState(''),[page,setPage]=useState(1),[more,setMore]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');const load=useCallback(async(next=1)=>{if(!token)return;setLoading(true);try{const data=await api.violations(token,next,status);setItems(v=>next===1?data.items:[...v,...data.items]);setPage(next);setMore(data.has_more);setError('')}catch(e){setError(e instanceof Error?e.message:'Unable to load history')}finally{setLoading(false)}},[token,status]);useEffect(()=>{load(1)},[load]);return <View style={s.page}><WorkerNav/><Text style={s.title}>Hello, {worker?.name}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filters}>{statuses.map(v=><Pressable key={v||'all'} onPress={()=>setStatus(v)} style={[s.chip,status===v&&s.chipOn]}><Text style={status===v?s.white:s.chipText}>{v?v.replace('_',' '):'all'}</Text></Pressable>)}</ScrollView><ScrollView refreshControl={<RefreshControl refreshing={loading&&page===1} onRefresh={()=>load(1)}/>} contentContainerStyle={s.list}>{!!error&&<Text style={s.error}>{error}</Text>}{!loading&&!items.length&&<Text style={s.sub}>No violations found.</Text>}{items.map(v=><View key={v.instance_id} style={s.card}><Text style={s.heading}>Missing: {v.missing_ppe.join(', ')||'PPE'}</Text><Text style={s.sub}>Detected {v.first_detected}</Text><Text style={s.status}>{v.review_status.replace('_',' ')}</Text>{v.review_reason?<Text style={s.note}>Review: {v.review_reason}</Text>:null}{v.review_status==='pending'?<Pressable style={s.button} onPress={()=>router.push(`/proof/${v.instance_id}`)}><Text style={s.white}>Acknowledge and submit proof</Text></Pressable>:null}</View>)}{more?<Pressable style={s.more} onPress={()=>load(page+1)} disabled={loading}><Text style={s.link}>{loading?'Loading…':'Load more'}</Text></Pressable>:null}{loading&&page===1?<ActivityIndicator/>:null}</ScrollView></View>}const s=StyleSheet.create({page:{flex:1,padding:16},title:{fontSize:22,fontWeight:'700',marginBottom:10},filters:{flexGrow:0,marginBottom:10},chip:{paddingVertical:8,paddingHorizontal:12,backgroundColor:'#e9eef5',borderRadius:16,marginRight:7},chipOn:{backgroundColor:'#1769d1'},chipText:{textTransform:'capitalize'},white:{color:'#fff',fontWeight:'700',textTransform:'capitalize'},list:{gap:12,paddingBottom:24},card:{backgroundColor:'#fff',padding:16,borderRadius:8,borderWidth:1,borderColor:'#dbe1ea'},heading:{fontSize:17,fontWeight:'700'},sub:{color:'#637083',marginTop:5},status:{color:'#1769d1',fontWeight:'700',marginTop:9,textTransform:'capitalize'},note:{marginTop:8},button:{backgroundColor:'#1769d1',padding:12,borderRadius:5,alignItems:'center',marginTop:14},error:{color:'#b42318'},more:{alignItems:'center',padding:14},link:{color:'#1769d1',fontWeight:'700'}});
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator, Pressable, RefreshControl, ScrollView,
+  StyleSheet, Text, View,
+} from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { api, Violation } from '../src/api';
+import { useAuth } from '../src/auth';
+
+const STATUSES = ['pending', 'worker_submitted', 'resolved'] as const;
+type Status = typeof STATUSES[number];
+type Counts = Record<Status, number>;
+
+const label = (status: Status) => status === 'worker_submitted' ? 'Submitted' : (
+  status.charAt(0).toUpperCase() + status.slice(1)
+);
+
+export default function Violations() {
+  const { token, worker } = useAuth();
+  const router = useRouter();
+  const [items, setItems] = useState<Violation[]>([]);
+  const [status, setStatus] = useState<Status>('pending');
+  const [counts, setCounts] = useState<Counts>({ pending: 0, worker_submitted: 0, resolved: 0 });
+  const [page, setPage] = useState(1);
+  const [more, setMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async (nextPage = 1) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [violations, nextCounts] = await Promise.all([
+        api.violations(token, nextPage, status),
+        api.violationCounts(token),
+      ]);
+      setItems(current => nextPage === 1 ? violations.items : [...current, ...violations.items]);
+      setPage(nextPage);
+      setMore(violations.has_more);
+      setCounts(nextCounts);
+      setError('');
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Unable to load safety records');
+    } finally {
+      setLoading(false);
+    }
+  }, [token, status]);
+
+  useFocusEffect(useCallback(() => {
+    void load(1);
+  }, [load]));
+
+  const changeStatus = (next: Status) => {
+    setItems([]);
+    setPage(1);
+    setStatus(next);
+  };
+
+  return <View style={styles.page}>
+    <View style={styles.header}>
+      <View>
+        <Text style={styles.title}>Hello, {worker?.name}</Text>
+        <Text style={styles.subtitle}>My safety records</Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open profile"
+        style={styles.profileButton}
+        onPress={() => router.push('/profile')}
+      >
+        <Text style={styles.profileIcon}>{worker?.name?.trim().charAt(0).toUpperCase() || 'P'}</Text>
+      </Pressable>
+    </View>
+
+    <View style={styles.tabs}>
+      {STATUSES.map(value => <Pressable
+        key={value}
+        onPress={() => changeStatus(value)}
+        style={[styles.tab, status === value && styles.activeTab]}
+      >
+        <Text style={[styles.tabText, status === value && styles.activeTabText]}>
+          {label(value)} ({counts[value]})
+        </Text>
+      </Pressable>)}
+    </View>
+
+    <ScrollView
+      refreshControl={<RefreshControl refreshing={loading && page === 1} onRefresh={() => load(1)} />}
+      contentContainerStyle={styles.list}
+    >
+      {!!error && <Text style={styles.error}>{error}</Text>}
+      {loading && page === 1 && !items.length ? <ActivityIndicator /> : null}
+      {!loading && !items.length ? <Text style={styles.empty}>No {label(status).toLowerCase()} safety records.</Text> : null}
+      {items.map(item => <View key={item.instance_id} style={styles.card}>
+        <Text style={styles.heading}>Missing: {item.missing_ppe.join(', ') || 'PPE'}</Text>
+        <Text style={styles.meta}>Detected {item.first_detected}</Text>
+        {item.review_status === 'pending' && <Text style={styles.pending}>Action required</Text>}
+        {item.review_status === 'worker_submitted' && <Text style={styles.submitted}>Awaiting supervisor approval</Text>}
+        {item.review_status === 'resolved' && <Text style={styles.resolved}>Resolved</Text>}
+        {item.review_reason ? <Text style={styles.note}>Supervisor review: {item.review_reason}</Text> : null}
+        {item.reviewed_by ? <Text style={styles.meta}>Reviewed by {item.reviewed_by}</Text> : null}
+        {item.review_status === 'pending' ? <Pressable
+          style={styles.proofButton}
+          onPress={() => router.push(`/proof/${item.instance_id}`)}
+        >
+          <Text style={styles.buttonText}>Acknowledge and submit proof</Text>
+        </Pressable> : null}
+      </View>)}
+      {more ? <Pressable style={styles.more} onPress={() => load(page + 1)} disabled={loading}>
+        <Text style={styles.link}>{loading ? 'Loading...' : 'Load more'}</Text>
+      </Pressable> : null}
+    </ScrollView>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  page:{flex:1,padding:16},
+  header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:16},
+  title:{fontSize:22,fontWeight:'800',color:'#172033'},
+  subtitle:{color:'#637083',marginTop:3},
+  profileButton:{width:42,height:42,borderRadius:21,backgroundColor:'#1769d1',alignItems:'center',justifyContent:'center'},
+  profileIcon:{color:'#fff',fontSize:18,fontWeight:'800'},
+  tabs:{flexDirection:'row',gap:7,marginBottom:14},
+  tab:{flex:1,alignItems:'center',paddingVertical:10,paddingHorizontal:3,borderRadius:6,backgroundColor:'#e9eef5'},
+  activeTab:{backgroundColor:'#1769d1'},
+  tabText:{color:'#43516a',fontWeight:'700',fontSize:12},
+  activeTabText:{color:'#fff'},
+  list:{gap:12,paddingBottom:24},
+  card:{backgroundColor:'#fff',padding:16,borderRadius:8,borderWidth:1,borderColor:'#dbe1ea'},
+  heading:{fontSize:17,fontWeight:'700'},
+  meta:{color:'#637083',marginTop:5,fontSize:12},
+  pending:{color:'#b42318',fontWeight:'800',marginTop:9},
+  submitted:{color:'#b54708',fontWeight:'800',marginTop:9},
+  resolved:{color:'#067647',fontWeight:'800',marginTop:9},
+  note:{marginTop:8},
+  proofButton:{backgroundColor:'#1769d1',padding:12,borderRadius:5,alignItems:'center',marginTop:14},
+  buttonText:{color:'#fff',fontWeight:'700'},
+  error:{color:'#b42318'},
+  empty:{textAlign:'center',color:'#637083',marginTop:40},
+  more:{alignItems:'center',padding:14},
+  link:{color:'#1769d1',fontWeight:'700'},
+});

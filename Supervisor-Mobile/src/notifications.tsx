@@ -14,8 +14,6 @@ export function NotificationRegistration() {
   const router = useRouter();
   useEffect(() => {
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const type = response.notification.request.content.data?.type;
-      if (type === 'attendance_request') { router.push('/attendance'); return; }
       const id = response.notification.request.content.data?.instance_id;
       if (typeof id === 'string') {
         if (token) api.markRead(token, id).catch(() => undefined);
@@ -24,13 +22,10 @@ export function NotificationRegistration() {
     });
     const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
       const id = notification.request.content.data?.instance_id;
-      const type = notification.request.content.data?.type;
       Alert.alert(
         notification.request.content.title || 'PPE safety alert',
         notification.request.content.body || 'A new violation needs review.',
-        type === 'attendance_request'
-          ? [{ text: 'Later', style: 'cancel' }, { text: 'View', onPress: () => router.push('/attendance') }]
-          : typeof id === 'string'
+        typeof id === 'string'
           ? [{ text: 'Later', style: 'cancel' }, { text: 'View', onPress: () => { if (token) api.markRead(token, id).catch(() => undefined); router.push(`/violations/${id}`); } }]
           : [{ text: 'OK' }],
       );

@@ -459,6 +459,11 @@ def worker_violations(worker):
     return jsonify(db.worker_violations(worker['worker_number'],request.args.get('page'),request.args.get('per_page'),
         request.args.get('status'),request.args.get('ppe')))
 
+@app.route('/api/worker/violations/counts')
+@require_worker
+def worker_violation_counts(worker):
+    return jsonify(db.worker_violation_counts(worker['worker_number']))
+
 @app.route('/api/worker/devices', methods=['POST', 'DELETE'])
 @require_worker
 def worker_device(worker):
@@ -534,6 +539,11 @@ def mobile_device(supervisor):
 @require_supervisor()
 def mobile_violations(supervisor):
     return jsonify(db.get_mobile_violations(supervisor['id'], request.args.get('status', 'pending')))
+
+@app.route('/api/mobile/violations/counts')
+@require_supervisor()
+def mobile_violation_counts(supervisor):
+    return jsonify(db.get_mobile_violation_counts(supervisor['id']))
 
 @app.route('/api/mobile/workers')
 @require_supervisor()
@@ -634,7 +644,7 @@ def mobile_violation_detail(instance_id, supervisor):
         return jsonify({'error': 'Violation not found'}), 404
     for snapshot in data['snapshots']:
         snapshot['url'] = url_for('mobile_snapshot', snapshot_id=snapshot['id'], _external=True)
-    if data.get('review_status') == 'worker_submitted':
+    if data.get('worker_proof_at'):
         data['worker_proof_url'] = url_for('mobile_worker_proof', instance_id=instance_id, _external=True)
     return jsonify(data)
 
@@ -650,10 +660,25 @@ def mobile_worker_proof(instance_id, supervisor):
 @require_supervisor()
 def mobile_update_review(instance_id, supervisor):
     payload = request.get_json(silent=True) or {}
-    ok, message = db.update_mobile_review(
+    ok, message, action = db.update_mobile_review(
         supervisor, instance_id, payload.get('review_status'), payload.get('review_reason')
     )
-    return jsonify({'status': 'success' if ok else 'error', 'message': message}), 200 if ok else 400
+    if not ok:
+        return jsonify({'status': 'error', 'message': message}), 400
+    notified_devices = 0
+    if action and action.get('review_status') == 'pending':
+        tokens = list(dict.fromkeys(action.get('worker_tokens') or []))
+        results = [
+            expo_push_notifier.send_worker_proof_request(
+                token, instance_id, str(payload.get('review_reason') or '').strip()
+            ) for token in tokens
+        ]
+        notified_devices = sum(result.get('status') == 'sent' for result in results)
+    return jsonify({
+        'status': 'success', 'message': message,
+        'action': action.get('review_status') if action else None,
+        'notified_devices': notified_devices,
+    })
 
 
 @app.route('/api/mobile/snapshots/<int:snapshot_id>')
