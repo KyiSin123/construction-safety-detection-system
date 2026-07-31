@@ -4,14 +4,17 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://construction-safety-detection-system.onrender.com" }
+      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://ppe-detection-system-865515334320.asia-southeast3.run.app" }
     },
     "preview": {
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://construction-safety-detection-system.onrender.com" }
+      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://ppe-detection-system-865515334320.asia-southeast3.run.app" },
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
-      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://construction-safety-detection-system.onrender.com" }
+      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://ppe-detection-system-865515334320.asia-southeast3.run.app" }
     }
   }
 }
