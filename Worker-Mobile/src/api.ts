@@ -1,7 +1,7 @@
 export const API_BASE_URL=(process.env.EXPO_PUBLIC_API_BASE_URL||'').replace(/\/$/,'');
 export type Worker={worker_number:string;name:string;team?:string;phone?:string;email?:string;has_profile_photo:boolean};
 export type Page<T>={items:T[];page:number;per_page:number;total:number;has_more:boolean};
-export type Violation={instance_id:string;first_detected:string;missing_ppe:string[];review_status:'pending'|'worker_submitted'|'resolved';worker_comment?:string;has_proof:boolean;review_reason?:string;reviewed_by?:string;review_updated_at?:string};
+export type Violation={instance_id:string;first_detected:string;missing_ppe:string[];review_status:'pending'|'worker_submitted'|'resolved';worker_comment?:string;has_proof:boolean;review_reason?:string;reviewed_by?:string;review_updated_at?:string;snapshot_url?:string};
 async function request<T>(path:string,token?:string,options:RequestInit={}):Promise<T>{if(!API_BASE_URL)throw new Error('EXPO_PUBLIC_API_BASE_URL is not configured');const r=await fetch(`${API_BASE_URL}${path}`,{...options,headers:{Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`} : {}),...options.headers}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.message||'Request failed');return d as T}
 export const api={
   login:(worker_number:string,password:string)=>request<{access_token:string;worker:Worker}>('/api/worker/auth/login',undefined,{method:'POST',body:JSON.stringify({worker_number,password})}),

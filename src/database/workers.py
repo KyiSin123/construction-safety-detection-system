@@ -145,7 +145,9 @@ class WorkerMixin:
             total = c.fetchone()[0]
             c.execute(f'''
                 SELECT instance_id, first_detected, missing_ppe, review_status, worker_comment,
-                    worker_proof_path, worker_proof_at, review_reason, reviewed_by, review_updated_at
+                    worker_proof_path, worker_proof_at, review_reason, reviewed_by, review_updated_at,
+                    (SELECT s.id FROM snapshots s WHERE s.instance_id=instances.instance_id
+                     ORDER BY s.timestamp ASC, s.id ASC LIMIT 1) AS snapshot_id
                 FROM instances WHERE {where} ORDER BY first_detected DESC LIMIT %s OFFSET %s
             ''', tuple(params + [per_page, (page - 1) * per_page]))
             rows = c.fetchall()
@@ -156,6 +158,7 @@ class WorkerMixin:
                 'missing_ppe': [v for v in (r[2] or '').split(',') if v], 'review_status': r[3],
                 'worker_comment': r[4], 'has_proof': bool(r[5]), 'worker_proof_at': self._format_datetime(r[6]),
                 'review_reason': r[7], 'reviewed_by': r[8], 'review_updated_at': self._format_datetime(r[9]),
+                'snapshot_id': r[10],
             } for r in rows]
             return {'items': items, 'page': page, 'per_page': per_page, 'total': total, 'has_more': page * per_page < total}
         except Exception as e:
@@ -176,6 +179,25 @@ class WorkerMixin:
         except Exception as e:
             print(f"Error getting worker violation counts: {e}")
             return {'pending':0,'worker_submitted':0,'resolved':0}
+
+    def get_worker_snapshot_path(self, worker_number, snapshot_id):
+        """Return a snapshot only when it belongs to the authenticated confirmed worker."""
+        try:
+            conn = self._connect()
+            c = conn.cursor()
+            c.execute('''
+                SELECT s.snapshot_path
+                FROM snapshots s
+                JOIN instances i ON i.instance_id=s.instance_id
+                WHERE s.id=%s AND i.worker_number=%s AND i.identity_status='confirmed'
+            ''', (snapshot_id, worker_number))
+            row = c.fetchone()
+            c.close()
+            conn.close()
+            return row[0] if row else None
+        except Exception as e:
+            print(f"Error getting worker snapshot: {e}")
+            return None
 
     def update_worker_profile(self, worker_number, phone, email, profile_photo_path=None):
         try:

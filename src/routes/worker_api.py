@@ -7,11 +7,13 @@ import re
 import uuid
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file, url_for
 from PIL import Image
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from extensions import BASE_DIR, auth_service, db, expo_push_notifier, worker_profile
+from extensions import (
+    BASE_DIR, auth_service, db, expo_push_notifier, resolve_media_path, worker_profile,
+)
 
 worker_api_bp = Blueprint('worker_api', __name__)
 
@@ -99,10 +101,28 @@ def worker_change_password(worker):
 @worker_api_bp.route('/api/worker/violations')
 @require_worker
 def worker_violations(worker):
-    return jsonify(db.worker_violations(
+    result = db.worker_violations(
         worker['worker_number'], request.args.get('page'), request.args.get('per_page'),
         request.args.get('status'), request.args.get('ppe'),
-    ))
+    )
+    for item in result['items']:
+        snapshot_id = item.pop('snapshot_id', None)
+        item['snapshot_url'] = (
+            url_for('worker_api.worker_snapshot', snapshot_id=snapshot_id)
+            if snapshot_id else None
+        )
+    return jsonify(result)
+
+
+@worker_api_bp.route('/api/worker/snapshots/<int:snapshot_id>')
+@require_worker
+def worker_snapshot(snapshot_id, worker):
+    path = resolve_media_path(
+        db.get_worker_snapshot_path(worker['worker_number'], snapshot_id)
+    )
+    if not path:
+        return jsonify({'error': 'Snapshot not found'}), 404
+    return send_file(path, mimetype='image/jpeg')
 
 @worker_api_bp.route('/api/worker/violations/counts')
 @require_worker

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api, ViolationDetail, WorkerOption } from '../../src/api';
 import { useAuth } from '../../src/auth';
+import { AuthenticatedImage } from '../../src/AuthenticatedImage';
 
 export default function ViolationDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -15,8 +16,6 @@ export default function ViolationDetails() {
   const [search, setSearch] = useState('');
   const [workers, setWorkers] = useState<WorkerOption[]>([]);
   const [selectedWorker, setSelectedWorker] = useState<WorkerOption | null>(null);
-  const [proofImageUri, setProofImageUri] = useState<string | null>(null);
-  const [proofImageError, setProofImageError] = useState('');
 
   const load = async () => {
     if (!token || !id) return;
@@ -37,36 +36,6 @@ export default function ViolationDetails() {
     }, 250);
     return () => clearTimeout(timer);
   }, [token, search, item?.identity_status]);
-  useEffect(() => {
-    const proofUrl = item?.worker_proof_url;
-    if (!proofUrl || !token) {
-      setProofImageUri(null);
-      return;
-    }
-    if (Platform.OS !== 'web') {
-      setProofImageUri(proofUrl);
-      return;
-    }
-    let active = true;
-    let objectUrl = '';
-    setProofImageError('');
-    fetch(proofUrl, { headers: { Authorization: `Bearer ${token}` } })
-      .then(async response => {
-        if (!response.ok) throw new Error(`Unable to load worker proof (${response.status})`);
-        return response.blob();
-      })
-      .then(blob => {
-        objectUrl = URL.createObjectURL(blob);
-        if (active) setProofImageUri(objectUrl);
-      })
-      .catch(value => {
-        if (active) setProofImageError(value instanceof Error ? value.message : 'Unable to load worker proof');
-      });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [item?.worker_proof_url, token]);
 
   const sendWarning = async (worker: WorkerOption) => {
     if (!token || !id) return;
@@ -129,22 +98,18 @@ export default function ViolationDetails() {
       {item.worker_delivery && <Text style={styles.meta}>Worker notification: {item.worker_delivery.status}{item.worker_delivery.error ? ` — ${item.worker_delivery.error}` : ''}</Text>}
     </View>
     {item.snapshots.map(snapshot => <View key={snapshot.id} style={styles.panel}>
-      <Image source={{ uri: snapshot.url, headers: { Authorization: `Bearer ${token}` } }} style={styles.image} resizeMode="cover" />
+      <AuthenticatedImage path={snapshot.url} token={token!} style={styles.image} />
       <Text style={styles.meta}>Snapshot {snapshot.timestamp}</Text>
     </View>)}
     {item.review_status === 'worker_submitted' && <View style={styles.submittedPanel}>
       <Text style={styles.submittedTitle}>Resolved by worker — awaiting supervisor approval</Text>
-      {proofImageUri && <Image source={Platform.OS === 'web' ? {uri:proofImageUri} : {uri:proofImageUri,headers:{Authorization:`Bearer ${token}`}}} style={styles.image} resizeMode="cover" />}
-      {!proofImageUri && !proofImageError && item.worker_proof_url && <ActivityIndicator />}
-      {!!proofImageError && <Text style={styles.error}>{proofImageError}</Text>}
+      {item.worker_proof_url && <AuthenticatedImage path={item.worker_proof_url} token={token!} style={styles.image} />}
       <Text style={styles.workerComment}>{item.worker_comment || 'Worker submitted correction proof.'}</Text>
       {item.worker_proof_at && <Text style={styles.meta}>Submitted {item.worker_proof_at}</Text>}
     </View>}
     {item.review_status === 'resolved' && item.worker_proof_url && <View style={styles.panel}>
       <Text style={styles.section}>Worker proof</Text>
-      {proofImageUri && <Image source={Platform.OS === 'web' ? {uri:proofImageUri} : {uri:proofImageUri,headers:{Authorization:`Bearer ${token}`}}} style={styles.image} resizeMode="cover" />}
-      {!proofImageUri && !proofImageError && <ActivityIndicator />}
-      {!!proofImageError && <Text style={styles.error}>{proofImageError}</Text>}
+      <AuthenticatedImage path={item.worker_proof_url} token={token!} style={styles.image} />
       {item.worker_comment && <Text style={styles.workerComment}>{item.worker_comment}</Text>}
       {item.worker_proof_at && <Text style={styles.meta}>Submitted {item.worker_proof_at}</Text>}
     </View>}

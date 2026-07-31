@@ -1,10 +1,10 @@
 """Supervisor-facing mobile API: violation feed, assignment, notifications, attendance review."""
 
-import os
-
 from flask import Blueprint, jsonify, request, send_file, url_for
 
-from extensions import db, expo_push_notifier, require_supervisor, supervisor_profile
+from extensions import (
+    db, expo_push_notifier, require_supervisor, resolve_media_path, supervisor_profile,
+)
 
 supervisor_api_bp = Blueprint('supervisor_api', __name__)
 
@@ -139,9 +139,13 @@ def mobile_violation_detail(instance_id, supervisor):
     if not data:
         return jsonify({'error': 'Violation not found'}), 404
     for snapshot in data['snapshots']:
-        snapshot['url'] = url_for('supervisor_api.mobile_snapshot', snapshot_id=snapshot['id'], _external=True)
+        snapshot['url'] = url_for(
+            'supervisor_api.mobile_snapshot', snapshot_id=snapshot['id']
+        )
     if data.get('worker_proof_at'):
-        data['worker_proof_url'] = url_for('supervisor_api.mobile_worker_proof', instance_id=instance_id, _external=True)
+        data['worker_proof_url'] = url_for(
+            'supervisor_api.mobile_worker_proof', instance_id=instance_id
+        )
     return jsonify(data)
 
 
@@ -149,7 +153,8 @@ def mobile_violation_detail(instance_id, supervisor):
 @require_supervisor()
 def mobile_worker_proof(instance_id, supervisor):
     path = db.get_worker_proof_path(supervisor['id'], instance_id)
-    if not path or not os.path.isfile(path):
+    path = resolve_media_path(path)
+    if not path:
         return jsonify({'error': 'Worker proof not found'}), 404
     return send_file(path, mimetype='image/jpeg')
 
@@ -177,6 +182,7 @@ def mobile_update_review(instance_id, supervisor):
 @require_supervisor()
 def mobile_snapshot(snapshot_id, supervisor):
     path = db.get_mobile_snapshot_path(supervisor['id'], snapshot_id)
-    if not path or not os.path.isfile(path):
+    path = resolve_media_path(path)
+    if not path:
         return jsonify({'error': 'Snapshot not found'}), 404
     return send_file(path, mimetype='image/jpeg')

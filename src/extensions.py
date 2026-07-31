@@ -57,6 +57,18 @@ def get_model():
         _model = YOLO(model_path)
     return _model
 
+
+def resolve_media_path(path):
+    """Resolve legacy relative media paths independently of the process working directory."""
+    if not path:
+        return None
+    candidates = [path] if os.path.isabs(path) else [
+        os.path.abspath(path),
+        os.path.join(os.path.dirname(BASE_DIR), path),
+        os.path.join(BASE_DIR, path),
+    ]
+    return next((candidate for candidate in candidates if os.path.isfile(candidate)), None)
+
 MOBILE_WEB_ORIGINS = {
     origin.strip().rstrip('/')
     for origin in os.getenv(

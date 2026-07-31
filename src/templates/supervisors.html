@@ -4,12 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supervisor Administration - PPE Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root { --ink:#172033; --muted:#637083; --line:#dbe1ea; --blue:#1769d1; --red:#b42318; --bg:#f4f6f9; }
-        * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font:14px Arial,sans-serif; }
-        header { background:#fff; border-bottom:1px solid var(--line); } .wrap { max-width:1200px; margin:auto; padding:24px; }
-        h1 { margin:0; font-size:24px; } nav { margin-top:12px; display:flex; gap:16px; flex-wrap:wrap; } nav a { color:var(--muted); text-decoration:none; } nav a.active { color:var(--blue); font-weight:700; }
+        * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font:14px 'Poppins',sans-serif; }
+        header { background:#fff; padding:20px 0; border-bottom:1px solid var(--line); box-shadow:0 1px 3px rgba(0,0,0,.06); margin-bottom:32px; }
+        .wrap { max-width:1200px; margin:auto; padding:24px; }
+        h1 { display:flex; align-items:center; gap:12px; margin:0; font-size:26px; font-weight:600; }
+        nav { margin-top:12px; display:flex; gap:20px; flex-wrap:wrap; }
+        nav a { color:var(--muted); text-decoration:none; font-size:14px; font-weight:500; }
+        nav a:hover { color:var(--blue); }
+        nav a.active { color:var(--blue); border-bottom:2px solid var(--blue); padding-bottom:2px; }
         .grid { display:grid; grid-template-columns:360px 1fr; gap:20px; align-items:start; } .panel { background:#fff; border:1px solid var(--line); padding:20px; border-radius:8px; }
         .panel h2 { margin:0 0 16px; font-size:18px; } label { display:block; font-weight:600; margin:12px 0 6px; }
         input, select, textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:5px; font:inherit; } textarea { min-height:72px; }

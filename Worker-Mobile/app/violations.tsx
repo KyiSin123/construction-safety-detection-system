@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api, Violation } from '../src/api';
 import { useAuth } from '../src/auth';
+import { AuthenticatedImage } from '../src/AuthenticatedImage';
 
 const STATUSES = ['pending', 'worker_submitted', 'resolved'] as const;
 type Status = typeof STATUSES[number];
@@ -92,6 +93,7 @@ export default function Violations() {
       {loading && page === 1 && !items.length ? <ActivityIndicator /> : null}
       {!loading && !items.length ? <Text style={styles.empty}>No {label(status).toLowerCase()} safety records.</Text> : null}
       {items.map(item => <View key={item.instance_id} style={styles.card}>
+        {item.snapshot_url && token ? <AuthenticatedImage path={item.snapshot_url} token={token} style={styles.snapshot} /> : null}
         <Text style={styles.heading}>Missing: {item.missing_ppe.join(', ') || 'PPE'}</Text>
         <Text style={styles.meta}>Detected {item.first_detected}</Text>
         {item.review_status === 'pending' && <Text style={styles.pending}>Action required</Text>}
@@ -127,6 +129,7 @@ const styles = StyleSheet.create({
   activeTabText:{color:'#fff'},
   list:{gap:12,paddingBottom:24},
   card:{backgroundColor:'#fff',padding:16,borderRadius:8,borderWidth:1,borderColor:'#dbe1ea'},
+  snapshot:{width:'100%',height:220,borderRadius:6,backgroundColor:'#dbe1ea',marginBottom:12},
   heading:{fontSize:17,fontWeight:'700'},
   meta:{color:'#637083',marginTop:5,fontSize:12},
   pending:{color:'#b42318',fontWeight:'800',marginTop:9},

@@ -165,6 +165,24 @@
   </div>
 
   <script>
+    async function parseJsonResponse(response) {
+      const responseText = await response.text();
+
+      if (!responseText.trim()) {
+        throw new Error(`The server returned an empty response (${response.status}).`);
+      }
+
+      try {
+        return JSON.parse(responseText);
+      } catch (error) {
+        const contentType = response.headers.get('content-type') || '';
+        const message = contentType.includes('text/html')
+          ? `The server returned an unexpected page (${response.status}).`
+          : `The server returned an invalid JSON response (${response.status}).`;
+        throw new Error(message);
+      }
+    }
+
     function complianceBadge(isCompliant) {
       return `<span class="badge ${isCompliant ? 'compliant' : 'violation'}">${isCompliant ? 'Compliant' : 'Non-compliant'}</span>`;
     }
