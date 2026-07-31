@@ -1,10 +1,12 @@
 """Admin dashboard API: supervisors, settings, worker registry, attendance, violation instances."""
 
-from flask import Blueprint, jsonify, request
+import io
+
+from flask import Blueprint, jsonify, request, send_file, url_for
 from werkzeug.security import generate_password_hash
 
 import extensions
-from extensions import db, instance_detector, require_supervisor
+from extensions import db, instance_detector, require_supervisor, resolve_media_path
 
 admin_api_bp = Blueprint('admin_api', __name__)
 
@@ -165,10 +167,28 @@ def get_instance_snapshots(instance_id, supervisor):
     try:
         data = db.get_instance_snapshots(instance_id)
         if data:
+            for snapshot in data['snapshots']:
+                snapshot['url'] = url_for(
+                    'admin_api.get_admin_snapshot', snapshot_id=snapshot['id']
+                )
             return jsonify(data)
         return jsonify({'error': 'Instance not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@admin_api_bp.route('/api/admin/snapshots/<int:snapshot_id>')
+@require_supervisor(admin_only=True)
+def get_admin_snapshot(snapshot_id, supervisor):
+    media = db.get_admin_snapshot_media(snapshot_id)
+    if not media:
+        return jsonify({'error': 'Snapshot not found'}), 404
+    path = resolve_media_path(media.get('path'))
+    if path:
+        return send_file(path, mimetype=media['mime_type'])
+    if media.get('data'):
+        return send_file(io.BytesIO(media['data']), mimetype=media['mime_type'])
+    return jsonify({'error': 'Snapshot image is no longer available'}), 404
 
 
 @admin_api_bp.route('/api/admin/instances/<instance_id>', methods=['DELETE'])

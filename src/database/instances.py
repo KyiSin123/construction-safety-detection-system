@@ -147,17 +147,9 @@ class InstanceMixin:
             return False
         conn = None
         c = None
-        # A constant lock name avoids application/DB timezone disagreement at midnight;
-        # the authoritative day boundary remains MySQL's CURDATE().
-        lock_name = 'ppe_unknown_alert_daily'
         try:
             conn = self._connect()
             c = conn.cursor()
-            c.execute('SELECT GET_LOCK(%s, 10)', (lock_name,))
-            locked = c.fetchone()
-            if not locked or locked[0] != 1:
-                return False
-
             c.execute('''
                 SELECT detection_batch_id, created_at
                 FROM unknown_alert_daily_batches
@@ -213,22 +205,27 @@ class InstanceMixin:
             if prior and prior[0] != detection_batch_id:
                 return False
 
+            # The primary key on alert_date is the concurrency lock. INSERT
+            # IGNORE is supported by managed MySQL services that disable the
+            # GET_LOCK advisory-lock function.
             c.execute('''
-                INSERT INTO unknown_alert_daily_batches (alert_date, detection_batch_id)
+                INSERT IGNORE INTO unknown_alert_daily_batches
+                    (alert_date, detection_batch_id)
                 VALUES (CURDATE(), %s)
             ''', (detection_batch_id,))
             conn.commit()
-            return True
+            c.execute('''
+                SELECT detection_batch_id
+                FROM unknown_alert_daily_batches
+                WHERE alert_date=CURDATE()
+            ''')
+            owner = c.fetchone()
+            return bool(owner and owner[0] == detection_batch_id)
         except Exception as e:
             print(f"Error claiming unknown alert batch: {e}")
             return False
         finally:
             if c is not None:
-                try:
-                    c.execute('SELECT RELEASE_LOCK(%s)', (lock_name,))
-                    c.fetchone()
-                except Exception:
-                    pass
                 c.close()
             if conn is not None:
                 conn.close()
@@ -460,7 +457,14 @@ class InstanceMixin:
             conn = self._connect()
             c = conn.cursor()
 
-            c.execute('SELECT * FROM instances WHERE instance_id = %s', (instance_id,))
+            c.execute('''
+                SELECT instance_id, first_detected, last_updated, missing_ppe, detected_ppe,
+                       worker_number, worker_name, worker_team, identity_confidence,
+                       identity_status, identity_source, identity_raw_response,
+                       notification_status, notification_error, review_status,
+                       review_reason, reviewed_by, review_updated_at
+                FROM instances WHERE instance_id = %s
+            ''', (instance_id,))
             instance_row = c.fetchone()
 
             if not instance_row:
@@ -469,7 +473,7 @@ class InstanceMixin:
                 return None
 
             c.execute('''
-                SELECT snapshot_path, timestamp
+                SELECT id, snapshot_path, timestamp
                 FROM snapshots
                 WHERE instance_id = %s
                 ORDER BY timestamp ASC
@@ -480,31 +484,52 @@ class InstanceMixin:
             conn.close()
 
             return {
-                'instance_id': instance_row[1],
-                'first_detected': self._format_datetime(instance_row[2]),
-                'last_updated': self._format_datetime(instance_row[3]),
-                'missing_ppe': instance_row[5].split(',') if instance_row[5] else [],
-                'detected_ppe': instance_row[6].split(',') if instance_row[6] else [],
-                'worker_number': instance_row[7],
-                'worker_name': instance_row[8],
-                'worker_team': instance_row[9],
-                'identity_confidence': instance_row[10] or 0,
-                'identity_status': instance_row[11] or 'unknown',
-                'identity_source': instance_row[12],
-                'identity_raw_response': instance_row[13],
-                'notification_status': instance_row[14] or 'not_sent',
-                'notification_error': instance_row[15],
-                'review_status': instance_row[16] or 'pending',
-                'review_reason': instance_row[17],
-                'reviewed_by': instance_row[18],
-                'review_updated_at': self._format_datetime(instance_row[19]),
+                'instance_id': instance_row[0],
+                'first_detected': self._format_datetime(instance_row[1]),
+                'last_updated': self._format_datetime(instance_row[2]),
+                'missing_ppe': instance_row[3].split(',') if instance_row[3] else [],
+                'detected_ppe': instance_row[4].split(',') if instance_row[4] else [],
+                'worker_number': instance_row[5],
+                'worker_name': instance_row[6],
+                'worker_team': instance_row[7],
+                'identity_confidence': instance_row[8] or 0,
+                'identity_status': instance_row[9] or 'unknown',
+                'identity_source': instance_row[10],
+                'identity_raw_response': instance_row[11],
+                'notification_status': instance_row[12] or 'not_sent',
+                'notification_error': instance_row[13],
+                'review_status': instance_row[14] or 'pending',
+                'review_reason': instance_row[15],
+                'reviewed_by': instance_row[16],
+                'review_updated_at': self._format_datetime(instance_row[17]),
                 'snapshots': [
-                    {'path': row[0], 'timestamp': self._format_datetime(row[1])}
+                    {'id': row[0], 'path': row[1], 'timestamp': self._format_datetime(row[2])}
                     for row in snapshot_rows
                 ]
             }
         except Exception as e:
             print(f"Error getting instance snapshots: {e}")
+            return None
+
+    def get_admin_snapshot_media(self, snapshot_id):
+        """Return snapshot bytes/path for an authenticated administrator."""
+        try:
+            conn = self._connect()
+            c = conn.cursor()
+            c.execute('''
+                SELECT snapshot_path, snapshot_data, mime_type
+                FROM snapshots WHERE id=%s
+            ''', (snapshot_id,))
+            row = c.fetchone()
+            c.close()
+            conn.close()
+            return {
+                'path': row[0],
+                'data': bytes(row[1]) if row[1] is not None else None,
+                'mime_type': row[2] or 'image/jpeg',
+            } if row else None
+        except Exception as e:
+            print(f"Error getting admin snapshot: {e}")
             return None
 
     def update_instance_review(self, instance_id, review_status, review_reason=None, reviewed_by=None):

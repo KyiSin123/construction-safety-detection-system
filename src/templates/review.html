@@ -580,10 +580,10 @@
                         ${snapshots.length ? `
                             <div class="snapshots-grid">
                                 ${snapshots.map((snapshot, index) => {
-                                    const path = escapeHtml(snapshot.path);
+                                    const url = escapeHtml(snapshot.url);
                                     return `
                                         <div class="snapshot-item">
-                                            <img src="/${path}" alt="Snapshot ${index + 1}" class="snapshot-image" onclick="window.open('/${path}', '_blank')">
+                                            <img data-snapshot-url="${url}" alt="Snapshot ${index + 1}" class="snapshot-image" onclick="openAdminSnapshot(this.dataset.snapshotUrl)">
                                             <div class="snapshot-info">
                                                 <div class="snapshot-number">Snapshot #${index + 1}</div>
                                                 <div class="snapshot-time"><i class="fas fa-clock"></i> ${formatDate(snapshot.timestamp)}</div>
@@ -594,10 +594,47 @@
                             </div>
                         ` : `<div class="empty-state"><i class="fas fa-image"></i><p>No snapshots available for this violation</p></div>`}
                     `;
+                    loadAdminSnapshotImages();
                 })
                 .catch(error => {
                     console.error('Error loading snapshots:', error);
                     modalBody.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Error loading snapshots</p></div>`;
+                });
+        }
+
+        function loadAdminSnapshotImages() {
+            document.querySelectorAll('img[data-snapshot-url]').forEach(image => {
+                adminFetch(image.dataset.snapshotUrl)
+                    .then(response => {
+                        if (!response.ok) throw new Error(`Snapshot unavailable (${response.status})`);
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const objectUrl = URL.createObjectURL(blob);
+                        image.src = objectUrl;
+                        image.dataset.objectUrl = objectUrl;
+                    })
+                    .catch(error => {
+                        image.alt = error.message;
+                        image.classList.add('snapshot-error');
+                    });
+            });
+        }
+
+        function openAdminSnapshot(url) {
+            const preview = window.open('', '_blank');
+            adminFetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error(`Snapshot unavailable (${response.status})`);
+                    return response.blob();
+                })
+                .then(blob => {
+                    const objectUrl = URL.createObjectURL(blob);
+                    if (preview) preview.location.href = objectUrl;
+                })
+                .catch(error => {
+                    if (preview) preview.close();
+                    showToast(error.message, true);
                 });
         }
 
@@ -613,6 +650,9 @@
         }
 
         function closeSnapshotModal() {
+            document.querySelectorAll('img[data-object-url]').forEach(image => {
+                URL.revokeObjectURL(image.dataset.objectUrl);
+            });
             document.getElementById('snapshotModal').classList.remove('active');
         }
 
