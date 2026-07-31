@@ -496,6 +496,7 @@
 
     <script>
         const adminToken = sessionStorage.getItem('supervisor_admin_token');
+        let currentDetectionMode = 'single';
         if (!adminToken) window.location.replace('/admin');
         function adminFetch(path, options = {}) {
             options.headers = { ...(options.headers || {}), Authorization: `Bearer ${adminToken}` };
@@ -567,7 +568,12 @@
         }
 
         function getSettings() {
-            const detectionMode = document.querySelector('input[name="detectionMode"]:checked').value;
+            // The detection-mode controls were removed from this page, so preserve
+            // the mode loaded from the server instead of dereferencing a missing radio.
+            const selectedMode = document.querySelector('input[name="detectionMode"]:checked');
+            const detectionMode = selectedMode ? selectedMode.value : currentDetectionMode;
+            const delayValue = Number.parseFloat(document.getElementById('nonComplianceDelay').value);
+            const resetValue = Number.parseInt(document.getElementById('instanceResetTimeout').value, 10);
             
             return {
                 required_ppe: {
@@ -575,14 +581,15 @@
                     vest: document.getElementById('vest').checked,
                     mask: document.getElementById('mask').checked
                 },
-                non_compliance_delay: parseFloat(document.getElementById('nonComplianceDelay').value) || 3,
-                instance_reset_timeout: parseInt(document.getElementById('instanceResetTimeout').value) || 5,
+                non_compliance_delay: Number.isFinite(delayValue) ? delayValue : 3,
+                instance_reset_timeout: Number.isFinite(resetValue) ? resetValue : 5,
                 detection_mode: detectionMode
             };
         }
 
         function applySettings(settings) {
             if (settings.detection_mode) {
+                currentDetectionMode = settings.detection_mode;
                 const radio = document.getElementById(settings.detection_mode);
                 if (radio) {
                     radio.checked = true;

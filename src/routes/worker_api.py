@@ -117,12 +117,15 @@ def worker_violations(worker):
 @worker_api_bp.route('/api/worker/snapshots/<int:snapshot_id>')
 @require_worker
 def worker_snapshot(snapshot_id, worker):
-    path = resolve_media_path(
-        db.get_worker_snapshot_path(worker['worker_number'], snapshot_id)
-    )
-    if not path:
+    media = db.get_worker_snapshot_media(worker['worker_number'], snapshot_id)
+    if not media:
         return jsonify({'error': 'Snapshot not found'}), 404
-    return send_file(path, mimetype='image/jpeg')
+    path = resolve_media_path(media.get('path'))
+    if path:
+        return send_file(path, mimetype=media['mime_type'])
+    if media.get('data'):
+        return send_file(io.BytesIO(media['data']), mimetype=media['mime_type'])
+    return jsonify({'error': 'Snapshot file is no longer available'}), 404
 
 @worker_api_bp.route('/api/worker/violations/counts')
 @require_worker

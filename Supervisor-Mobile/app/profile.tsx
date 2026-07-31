@@ -25,9 +25,9 @@ export default function Profile() {
       <Text style={styles.name}>{supervisor.display_name}</Text>
       <Text style={styles.detail}>Username: {supervisor.username}</Text>
       <Text style={styles.detail}>Role: {supervisor.role}</Text>
-      <Pressable style={styles.testButton} onPress={testPush} disabled={testing}>
+      {/* <Pressable style={styles.testButton} onPress={testPush} disabled={testing}>
         <Text style={styles.buttonText}>{testing ? 'Sending test...' : 'Test push notification'}</Text>
-      </Pressable>
+      </Pressable> */}
     </View>
     <Pressable style={styles.signout} onPress={signOut}><Text style={styles.buttonText}>Sign out</Text></Pressable>
   </ScrollView>;

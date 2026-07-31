@@ -87,6 +87,19 @@ class BatchAlertTests(unittest.TestCase):
         self.assertEqual('existing-case', results[0]['existing_instance_id'])
         self.db.log_instance_snapshot.assert_not_called()
 
+    def test_failed_unknown_batch_releases_daily_claim(self):
+        self.db.claim_unknown_alert_batch.return_value = True
+        self.snapshot_manager.save_snapshot.return_value = None
+        patches = self.extension_patches()
+        with patches[0], patches[1], patches[2], patches[3]:
+            results = video_analysis._persist_alerts(
+                [candidate([0, 0, 20, 40])],
+                'failedbatch',
+            )
+
+        self.assertEqual('delivery_failed', results[0]['status'])
+        self.db.release_unknown_alert_batch.assert_called_once_with('failedbatch')
+
     def test_repeated_video_person_updates_one_track(self):
         tracks = []
         video_analysis._update_tracks(tracks, [candidate([0, 0, 20, 40])], 1, 0.5)

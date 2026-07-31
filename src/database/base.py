@@ -92,6 +92,8 @@ class BaseDatabase:
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     instance_id VARCHAR(255),
                     snapshot_path TEXT,
+                    snapshot_data LONGBLOB NULL,
+                    mime_type VARCHAR(64) DEFAULT 'image/jpeg',
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (instance_id) REFERENCES instances(instance_id)
                 )
@@ -275,6 +277,7 @@ class BaseDatabase:
             self._ensure_worker_columns(c)
             self._ensure_worker_submission_columns(c)
             self._ensure_attendance_columns(c)
+            self._ensure_snapshot_columns(c)
 
             conn.commit()
             c.close()
@@ -292,6 +295,20 @@ class BaseDatabase:
         for column in ('check_in_reason', 'check_out_reason'):
             if column not in existing_columns:
                 cursor.execute(f'ALTER TABLE attendance_records ADD COLUMN {column} TEXT')
+
+    def _ensure_snapshot_columns(self, cursor):
+        cursor.execute('''
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'snapshots'
+        ''', (self.config['database'],))
+        existing = {row[0] for row in cursor.fetchall()}
+        if 'snapshot_data' not in existing:
+            cursor.execute('ALTER TABLE snapshots ADD COLUMN snapshot_data LONGBLOB NULL')
+        if 'mime_type' not in existing:
+            cursor.execute(
+                "ALTER TABLE snapshots ADD COLUMN mime_type VARCHAR(64) DEFAULT 'image/jpeg'"
+            )
 
     def _ensure_instance_columns(self, cursor):
         cursor.execute('''

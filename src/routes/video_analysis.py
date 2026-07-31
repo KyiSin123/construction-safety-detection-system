@@ -191,6 +191,7 @@ def _persist_alerts(candidates, batch_id):
     unknown_batch_allowed = (
         extensions.db.claim_unknown_alert_batch(batch_id) if has_unknown else False
     )
+    persisted_unknown = False
 
     for index, (candidate, identity) in enumerate(identified):
         instance_id = _instance_id(batch_id, index)
@@ -246,6 +247,8 @@ def _persist_alerts(candidates, batch_id):
             result.update(status='delivery_failed', error='Could not store violation')
             alerts.append(result)
             continue
+        if unknown:
+            persisted_unknown = True
 
         notifications = extensions.send_mobile_supervisor_notifications(
             instance_id, candidate['missing_ppe'], identity
@@ -258,6 +261,8 @@ def _persist_alerts(candidates, batch_id):
         if not delivered:
             result['error'] = 'One or more supervisor notifications were not delivered'
         alerts.append(result)
+    if has_unknown and unknown_batch_allowed and not persisted_unknown:
+        extensions.db.release_unknown_alert_batch(batch_id)
     return alerts
 
 

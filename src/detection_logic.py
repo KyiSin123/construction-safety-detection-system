@@ -239,10 +239,10 @@ class ComplianceChecker:
 class SnapshotManager:
     """Handle snapshot saving"""
     
-    def __init__(self, snapshot_dir='snapshots'):
-        self.snapshot_dir = snapshot_dir
-        if not os.path.exists(self.snapshot_dir):
-            os.makedirs(self.snapshot_dir)
+    def __init__(self, snapshot_dir=None):
+        configured_dir = snapshot_dir or os.getenv('SNAPSHOT_DIR', 'snapshots')
+        self.snapshot_dir = os.path.abspath(configured_dir)
+        os.makedirs(self.snapshot_dir, exist_ok=True)
     
     def save_snapshot(self, frame, filename):
         """Save frame as snapshot with specific filename"""

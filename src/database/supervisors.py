@@ -225,7 +225,8 @@ class SupervisorMixin:
                 conn.close()
                 return False, 'This violation is not assigned to you', None
             c.execute('''
-                SELECT worker_number, identity_status, review_status FROM instances
+                SELECT worker_number, identity_status, review_status, detection_batch_id
+                FROM instances
                 WHERE instance_id = %s FOR UPDATE
             ''', (instance_id,))
             instance = c.fetchone()
@@ -262,6 +263,27 @@ class SupervisorMixin:
                     last_updated = CURRENT_TIMESTAMP
                 WHERE instance_id = %s
             ''', (worker[0], worker[1], worker[2], supervisor['id'], supervisor['display_name'], instance_id))
+            detection_batch_id = instance[3]
+            if detection_batch_id:
+                # Manual identification turns this record into a known-worker case.
+                # Release the one-unknown-batch-per-day reservation when no other
+                # unknown person remains in the batch, so the next unknown person
+                # can create a fresh record and supervisor alert.
+                c.execute('''
+                    DELETE b FROM unknown_alert_daily_batches b
+                    WHERE b.alert_date = CURDATE()
+                      AND b.detection_batch_id = %s
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM instances i
+                        WHERE i.detection_batch_id = b.detection_batch_id
+                          AND (
+                            i.worker_number IS NULL OR i.worker_number = ''
+                            OR i.identity_status IS NULL
+                            OR i.identity_status != 'confirmed'
+                          )
+                      )
+                ''', (detection_batch_id,))
             c.execute('''
                 INSERT INTO violation_review_events
                     (instance_id, previous_status, review_status, review_reason,

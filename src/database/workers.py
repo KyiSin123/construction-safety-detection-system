@@ -182,11 +182,16 @@ class WorkerMixin:
 
     def get_worker_snapshot_path(self, worker_number, snapshot_id):
         """Return a snapshot only when it belongs to the authenticated confirmed worker."""
+        media = self.get_worker_snapshot_media(worker_number, snapshot_id)
+        return media['path'] if media else None
+
+    def get_worker_snapshot_media(self, worker_number, snapshot_id):
+        """Return authorized snapshot file metadata and portable database bytes."""
         try:
             conn = self._connect()
             c = conn.cursor()
             c.execute('''
-                SELECT s.snapshot_path
+                SELECT s.snapshot_path, s.snapshot_data, s.mime_type
                 FROM snapshots s
                 JOIN instances i ON i.instance_id=s.instance_id
                 WHERE s.id=%s AND i.worker_number=%s AND i.identity_status='confirmed'
@@ -194,7 +199,11 @@ class WorkerMixin:
             row = c.fetchone()
             c.close()
             conn.close()
-            return row[0] if row else None
+            return {
+                'path': row[0],
+                'data': bytes(row[1]) if row[1] is not None else None,
+                'mime_type': row[2] or 'image/jpeg',
+            } if row else None
         except Exception as e:
             print(f"Error getting worker snapshot: {e}")
             return None

@@ -105,6 +105,7 @@ def generate_frames():
                     identity_data.get('identity_status') != 'confirmed'
                     or not identity_data.get('worker_number')
                 )
+                unknown_allowed = False
                 if unknown_identity:
                     unknown_allowed = db.claim_unknown_alert_batch(detection_batch_id)
                     blocking_instance_id = None if unknown_allowed else (
@@ -136,6 +137,8 @@ def generate_frames():
 
                         if not snapshot_path:
                             instance_result['storage_status'] = 'snapshot_failed'
+                            if unknown_allowed:
+                                db.release_unknown_alert_batch(detection_batch_id)
                         else:
                             logged = db.log_instance_snapshot(
                                 instance_id=instance_result['instance_id'],
@@ -175,8 +178,12 @@ def generate_frames():
                                 last_snapshot_time = current_time
                             else:
                                 instance_result['storage_status'] = 'store_failed'
+                                if unknown_allowed:
+                                    db.release_unknown_alert_batch(detection_batch_id)
                     else:
                         instance_result['storage_status'] = 'snapshot_filename_unavailable'
+                        if unknown_allowed:
+                            db.release_unknown_alert_batch(detection_batch_id)
 
             if not is_compliant and instance_result['has_person']:
                 overlay = annotated_frame.copy()

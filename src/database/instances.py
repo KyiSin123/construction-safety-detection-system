@@ -25,14 +25,19 @@ class InstanceMixin:
             c = conn.cursor()
             if worker_number:
                 c.execute('''
-                    SELECT instance_id, missing_ppe
+                    SELECT instance_id
                     FROM instances
                     WHERE is_compliant = 0
-                      AND review_status IN (%s, %s)
+                      AND review_status = 'pending'
                       AND DATE(first_detected) = CURDATE()
                       AND worker_number = %s
                     ORDER BY first_detected ASC
-                ''', (*blocking_statuses, worker_number))
+                    LIMIT 1
+                ''', (worker_number,))
+                row = c.fetchone()
+                c.close()
+                conn.close()
+                return row[0] if row else None
             else:
                 c.execute('''
                     SELECT instance_id, missing_ppe
@@ -65,6 +70,13 @@ class InstanceMixin:
         try:
             if not instance_id or not snapshot_path:
                 return False
+            snapshot_data = None
+            try:
+                if os.path.isfile(snapshot_path) and os.path.getsize(snapshot_path) <= 5 * 1024 * 1024:
+                    with open(snapshot_path, 'rb') as snapshot_file:
+                        snapshot_data = snapshot_file.read()
+            except OSError as error:
+                print(f"Could not read snapshot data for database storage: {error}")
             identity = identity or {}
             missing_ppe_text = self._missing_ppe_text(missing_ppe)
             detected_ppe_text = self._missing_ppe_text(detected_ppe)
@@ -116,9 +128,9 @@ class InstanceMixin:
                 ))
 
             c.execute('''
-                INSERT INTO snapshots (instance_id, snapshot_path)
-                VALUES (%s, %s)
-            ''', (instance_id, snapshot_path))
+                INSERT INTO snapshots (instance_id, snapshot_path, snapshot_data, mime_type)
+                VALUES (%s, %s, %s, 'image/jpeg')
+            ''', (instance_id, snapshot_path, snapshot_data))
 
             conn.commit()
             c.close()
@@ -147,13 +159,41 @@ class InstanceMixin:
                 return False
 
             c.execute('''
-                SELECT detection_batch_id
+                SELECT detection_batch_id, created_at
                 FROM unknown_alert_daily_batches
                 WHERE alert_date = CURDATE()
             ''')
             row = c.fetchone()
             if row:
-                return row[0] == detection_batch_id
+                if row[0] == detection_batch_id:
+                    return True
+                c.execute('''
+                    SELECT COUNT(*),
+                           COALESCE(SUM(
+                             worker_number IS NULL OR worker_number = ''
+                             OR identity_status IS NULL
+                             OR identity_status != 'confirmed'
+                           ), 0)
+                    FROM instances
+                    WHERE detection_batch_id = %s
+                ''', (row[0],))
+                instance_count, unknown_count = c.fetchone()
+                c.execute(
+                    'SELECT TIMESTAMPDIFF(SECOND, %s, CURRENT_TIMESTAMP)',
+                    (row[1],),
+                )
+                reservation_age = c.fetchone()[0] or 0
+                if unknown_count > 0 or (instance_count == 0 and reservation_age < 300):
+                    return False
+                # Recover a reservation left behind either when a process stopped
+                # before persisting, or when every unknown person in the claimed
+                # batch was subsequently identified by a supervisor.
+                c.execute(
+                    'DELETE FROM unknown_alert_daily_batches '
+                    'WHERE alert_date=CURDATE() AND detection_batch_id=%s',
+                    (row[0],),
+                )
+                conn.commit()
 
             # Respect unknown alerts created earlier today by Live Detection or
             # by a deployment version that predates batch IDs.
@@ -192,6 +232,30 @@ class InstanceMixin:
                 c.close()
             if conn is not None:
                 conn.close()
+
+    def release_unknown_alert_batch(self, detection_batch_id):
+        """Release this batch only when it did not persist any violation."""
+        if not detection_batch_id:
+            return False
+        try:
+            conn = self._connect()
+            c = conn.cursor()
+            c.execute('''
+                DELETE b FROM unknown_alert_daily_batches b
+                WHERE b.alert_date=CURDATE() AND b.detection_batch_id=%s
+                  AND NOT EXISTS (
+                    SELECT 1 FROM instances i
+                    WHERE i.detection_batch_id=b.detection_batch_id
+                  )
+            ''', (detection_batch_id,))
+            released = c.rowcount > 0
+            conn.commit()
+            c.close()
+            conn.close()
+            return released
+        except Exception as e:
+            print(f"Error releasing unknown alert batch: {e}")
+            return False
 
     def get_statistics(self):
         """Get dashboard statistics from persisted violation instances."""
