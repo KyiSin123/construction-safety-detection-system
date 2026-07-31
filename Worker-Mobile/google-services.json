@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1087828379231",
+    "project_id": "construction-site-safety-a6e8d",
+    "storage_bucket": "construction-site-safety-a6e8d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1087828379231:android:10073519683b2ec0893dea",
+        "android_client_info": {
+          "package_name": "com.kyisin.constructionsafety"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJh7Iu6yOol79dO28CcJ2mDGegKY600uU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1087828379231:android:1de4c00151909ed3893dea",
+        "android_client_info": {
+          "package_name": "com.kyisin.ppeworker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJh7Iu6yOol79dO28CcJ2mDGegKY600uU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
