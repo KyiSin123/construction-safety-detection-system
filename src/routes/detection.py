@@ -100,10 +100,26 @@ def generate_frames():
                     worker_crop = select_worker_crop(frame, all_detections)
                 identity_result = identity_reader.identify_worker(worker_crop, db)
                 identity_data = identity_result.to_dict()
-                blocking_instance_id = db.find_blocking_violation(
-                    instance_result['missing_ppe'],
-                    identity_data
+                detection_batch_id = f"live_{instance_result['instance_id']}"
+                unknown_identity = (
+                    identity_data.get('identity_status') != 'confirmed'
+                    or not identity_data.get('worker_number')
                 )
+                if unknown_identity:
+                    unknown_allowed = db.claim_unknown_alert_batch(detection_batch_id)
+                    blocking_instance_id = None if unknown_allowed else (
+                        db.find_blocking_violation(
+                            instance_result['missing_ppe'],
+                            identity_data,
+                            detection_batch_id,
+                        ) or 'unknown-alert-batch-already-claimed'
+                    )
+                else:
+                    blocking_instance_id = db.find_blocking_violation(
+                        instance_result['missing_ppe'],
+                        identity_data,
+                        detection_batch_id,
+                    )
 
                 if blocking_instance_id:
                     instance_result['identity'] = identity_data
@@ -126,7 +142,8 @@ def generate_frames():
                                 missing_ppe=instance_result['missing_ppe'],
                                 detected_ppe=instance_result['detected_ppe'],
                                 snapshot_path=snapshot_path,
-                                identity=identity_data
+                                identity=identity_data,
+                                detection_batch_id=detection_batch_id,
                             )
 
                             instance_result['identity'] = identity_data

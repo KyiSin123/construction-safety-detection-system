@@ -9,7 +9,7 @@ from .base import REVIEW_STATUSES, BLOCKING_REVIEW_STATUSES
 class InstanceMixin:
     """Violation instance CRUD, review workflow, and analytics aggregation."""
 
-    def find_blocking_violation(self, missing_ppe, identity=None):
+    def find_blocking_violation(self, missing_ppe, identity=None, detection_batch_id=None):
         """Block a duplicate open violation only within the current calendar date."""
         try:
             normalized_missing_ppe = self._normalize_missing_ppe(missing_ppe)
@@ -41,8 +41,9 @@ class InstanceMixin:
                       AND review_status IN (%s, %s)
                       AND DATE(first_detected) = CURDATE()
                       AND (worker_number IS NULL OR worker_number = '')
+                      AND (%s IS NULL OR detection_batch_id IS NULL OR detection_batch_id != %s)
                     ORDER BY first_detected ASC
-                ''', blocking_statuses)
+                ''', (*blocking_statuses, detection_batch_id, detection_batch_id))
 
             rows = c.fetchall()
             c.close()
@@ -56,7 +57,10 @@ class InstanceMixin:
             print(f"Error checking blocking violation: {e}")
             return None
 
-    def log_instance_snapshot(self, instance_id, missing_ppe, detected_ppe, snapshot_path, identity=None):
+    def log_instance_snapshot(
+        self, instance_id, missing_ppe, detected_ppe, snapshot_path, identity=None,
+        detection_batch_id=None,
+    ):
         """Log a snapshot for an instance."""
         try:
             if not instance_id or not snapshot_path:
@@ -73,12 +77,14 @@ class InstanceMixin:
                 c.execute('''
                     INSERT INTO instances (
                         instance_id, is_compliant, missing_ppe, detected_ppe,
+                        detection_batch_id,
                         worker_number, worker_name, worker_team, identity_confidence,
                         identity_status, identity_source, identity_raw_response
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (
                     instance_id, False, missing_ppe_text, detected_ppe_text,
+                    detection_batch_id,
                     identity.get('worker_number'), identity.get('worker_name'), identity.get('team'),
                     identity.get('identity_confidence', 0), identity.get('identity_status', 'unknown'),
                     identity.get('identity_source'), identity.get('raw_response')
@@ -90,6 +96,7 @@ class InstanceMixin:
                     SET last_updated = CURRENT_TIMESTAMP,
                         missing_ppe = %s,
                         detected_ppe = %s,
+                        detection_batch_id = COALESCE(%s, detection_batch_id),
                         worker_number = COALESCE(%s, worker_number),
                         worker_name = COALESCE(%s, worker_name),
                         worker_team = COALESCE(%s, worker_team),
@@ -100,6 +107,7 @@ class InstanceMixin:
                     WHERE instance_id = %s
                 ''', (
                     missing_ppe_text, detected_ppe_text,
+                    detection_batch_id,
                     identity.get('worker_number'), identity.get('worker_name'), identity.get('team'),
                     identity.get('identity_confidence', 0), identity.get('identity_confidence', 0),
                     identity.get('identity_status'), identity.get('identity_status'),
@@ -120,6 +128,70 @@ class InstanceMixin:
         except Exception as e:
             print(f"Error logging instance snapshot: {e}")
             return False
+
+    def claim_unknown_alert_batch(self, detection_batch_id):
+        """Atomically allow every unknown person in only the first detection batch of the day."""
+        if not detection_batch_id:
+            return False
+        conn = None
+        c = None
+        # A constant lock name avoids application/DB timezone disagreement at midnight;
+        # the authoritative day boundary remains MySQL's CURDATE().
+        lock_name = 'ppe_unknown_alert_daily'
+        try:
+            conn = self._connect()
+            c = conn.cursor()
+            c.execute('SELECT GET_LOCK(%s, 10)', (lock_name,))
+            locked = c.fetchone()
+            if not locked or locked[0] != 1:
+                return False
+
+            c.execute('''
+                SELECT detection_batch_id
+                FROM unknown_alert_daily_batches
+                WHERE alert_date = CURDATE()
+            ''')
+            row = c.fetchone()
+            if row:
+                return row[0] == detection_batch_id
+
+            # Respect unknown alerts created earlier today by Live Detection or
+            # by a deployment version that predates batch IDs.
+            c.execute('''
+                SELECT detection_batch_id
+                FROM instances
+                WHERE is_compliant = 0
+                  AND DATE(first_detected) = CURDATE()
+                  AND (
+                    worker_number IS NULL OR worker_number = ''
+                    OR identity_status IS NULL OR identity_status != 'confirmed'
+                  )
+                ORDER BY first_detected ASC
+                LIMIT 1
+            ''')
+            prior = c.fetchone()
+            if prior and prior[0] != detection_batch_id:
+                return False
+
+            c.execute('''
+                INSERT INTO unknown_alert_daily_batches (alert_date, detection_batch_id)
+                VALUES (CURDATE(), %s)
+            ''', (detection_batch_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error claiming unknown alert batch: {e}")
+            return False
+        finally:
+            if c is not None:
+                try:
+                    c.execute('SELECT RELEASE_LOCK(%s)', (lock_name,))
+                    c.fetchone()
+                except Exception:
+                    pass
+                c.close()
+            if conn is not None:
+                conn.close()
 
     def get_statistics(self):
         """Get dashboard statistics from persisted violation instances."""
