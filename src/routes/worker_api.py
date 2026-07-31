@@ -77,8 +77,8 @@ def worker_me(worker):
 @worker_api_bp.route('/api/worker/profile-photo')
 @require_worker
 def worker_profile_photo(worker):
-    path = worker.get('profile_photo_path')
-    if not path or not os.path.isfile(path):
+    path = resolve_media_path(worker.get('profile_photo_path'))
+    if not path:
         return jsonify({'error': 'Profile photo not found'}), 404
     return send_file(path)
 

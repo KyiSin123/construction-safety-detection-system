@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { API_BASE_URL, api } from '../src/api';
+import { api } from '../src/api';
 import { useAuth } from '../src/auth';
+import { AuthenticatedImage } from '../src/AuthenticatedImage';
 
 export default function Profile() {
   const { token, worker, setWorker, signOut } = useAuth();
@@ -46,17 +47,15 @@ export default function Profile() {
       Alert.alert('Unable to change password', value instanceof Error ? value.message : 'Request failed');
     } finally { setSaving(false); }
   };
-  const photo = image
-    ? { uri: `data:image/jpeg;base64,${image}` }
-    : worker.has_profile_photo
-      ? { uri: `${API_BASE_URL}/api/worker/profile-photo`, headers: { Authorization: `Bearer ${token}` } }
-      : undefined;
-
   return <ScrollView contentContainerStyle={styles.page}>
     <View style={styles.card}>
       <Text style={styles.title}>{worker.name}</Text>
       <Text style={styles.hint}>{worker.worker_number} · {worker.team || 'No team'}</Text>
-      {photo ? <Image source={photo} style={styles.photo} /> : <View style={[styles.photo, styles.placeholder]}><Text>No photo</Text></View>}
+      {image
+        ? <Image source={{ uri: `data:image/jpeg;base64,${image}` }} style={styles.photo} />
+        : worker.has_profile_photo
+          ? <AuthenticatedImage path="/api/worker/profile-photo" token={token} style={styles.photo} />
+          : <View style={[styles.photo, styles.placeholder]}><Text>No photo</Text></View>}
       <Pressable onPress={choosePhoto}><Text style={styles.link}>Choose profile photo</Text></Pressable>
       <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="Phone" />
       <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
