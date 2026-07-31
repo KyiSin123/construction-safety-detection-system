@@ -54,7 +54,7 @@ ios/
 *.apk
 *.aab
 *.ipa
-google-services.json
+# google-services.json
 GoogleService-Info.plist
 *.jks
 *.keystore

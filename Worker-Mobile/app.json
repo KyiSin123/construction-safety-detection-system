@@ -1,23 +1,32 @@
 {
-    "expo": {
-        "name": "PPE Worker",
-        "slug": "ppe-worker",
-        "scheme": "ppeworker",
-        "plugins": [
-            "expo-router",
-            "expo-secure-store",
-            "expo-notifications",
-            [
-                "expo-image-picker",
-                {
-                    "photosPermission": "Allow PPE Worker to select proof photos.",
-                    "cameraPermission": "Allow PPE Worker to take a proof photo."
-                }
-            ]
-        ],
-        "android": {
-            "package": "com.kyisin.ppeworker",
-            "googleServicesFile": "./google-services.json"
+  "expo": {
+    "name": "PPE Worker",
+    "slug": "ppe-worker",
+    "scheme": "ppeworker",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow PPE Worker to select proof photos.",
+          "cameraPermission": "Allow PPE Worker to take a proof photo."
         }
+      ]
+    ],
+    "android": {
+      "package": "com.kyisin.ppeworker",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "14c60990-a8c1-4e0d-8ae5-c33473b48130"
+      }
     }
+  }
 }
