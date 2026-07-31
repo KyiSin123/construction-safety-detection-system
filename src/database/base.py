@@ -7,6 +7,7 @@ import mysql.connector
 
 
 INSTANCE_IDENTITY_COLUMNS = {
+    'detection_batch_id': 'VARCHAR(64) NULL',
     'worker_number': 'VARCHAR(64)',
     'worker_name': 'VARCHAR(255)',
     'worker_team': 'VARCHAR(255)',
@@ -184,6 +185,14 @@ class BaseDatabase:
                     UNIQUE KEY unique_violation_supervisor (instance_id, supervisor_id),
                     FOREIGN KEY (instance_id) REFERENCES instances(instance_id) ON DELETE CASCADE,
                     FOREIGN KEY (supervisor_id) REFERENCES supervisors(id) ON DELETE CASCADE
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS unknown_alert_daily_batches (
+                    alert_date DATE PRIMARY KEY,
+                    detection_batch_id VARCHAR(64) NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_unknown_alert_batch (detection_batch_id)
                 )
             ''')
 

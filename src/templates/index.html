@@ -510,6 +510,7 @@
 
     <div class="container">
         <div class="grid">
+            {% if camera_available %}
             <div class="card">
                 <div class="card-title">
                     <div>
@@ -544,6 +545,43 @@
                     <i class="fas fa-check-circle"></i> ALL COMPLIANT
                 </div>
             </div>
+            {% else %}
+            <div class="card">
+                <div class="card-title">
+                    <div>
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        PPE Detection
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                    This server has no camera attached. Upload a photo or a short video clip and it runs through the same detection model.
+                </p>
+
+                <div style="margin-bottom: 28px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Image</label>
+                    <input type="file" id="imageInput" accept="image/*" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit;">
+                    <div class="controls">
+                        <button class="btn btn-primary" id="imageBtn" onclick="analyzeImage()">
+                            <i class="fas fa-magic"></i> Analyze image
+                        </button>
+                    </div>
+                    <div id="imageStatus" style="margin-top: 10px; color: var(--text-secondary);"></div>
+                    <div id="imageResult"></div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Video clip <span style="font-weight: 400; color: var(--text-secondary);">(max 50MB, first 60s analyzed)</span></label>
+                    <input type="file" id="videoInput" accept="video/*" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit;">
+                    <div class="controls">
+                        <button class="btn btn-primary" id="videoBtn" onclick="analyzeVideo()">
+                            <i class="fas fa-magic"></i> Analyze video
+                        </button>
+                    </div>
+                    <div id="videoStatus" style="margin-top: 10px; color: var(--text-secondary);"></div>
+                    <div id="videoResult"></div>
+                </div>
+            </div>
+            {% endif %}
 
             <div class="side-stack">
                 <div class="card">
@@ -576,16 +614,19 @@
             </div>
         </div>
 
+        {% if camera_available %}
         <div class="card full-width">
             <div class="card-title"><div><span class="section-kicker">Model output</span>Current Detection</div></div>
             <div id="currentPersons">
                 <p style="color: var(--text-secondary);">No persons detected</p>
             </div>
         </div>
+        {% endif %}
     </div>
 
     <script>
         const socket = io();
+        {% if camera_available %}
         let isStreaming = false;
         let devMode = false;
 
@@ -743,6 +784,101 @@
                 personsDiv.innerHTML = '<p style="color: var(--text-secondary);">No persons detected</p>';
             }
         });
+        {% else %}
+        function complianceBadge(isCompliant) {
+            return isCompliant
+                ? '<div class="compliance-status compliant"><i class="fas fa-check-circle"></i> COMPLIANT</div>'
+                : '<div class="compliance-status non-compliant"><i class="fas fa-exclamation-triangle"></i> NON-COMPLIANT</div>';
+        }
+
+        function ppeBadges(items, missing) {
+            return items.map(item => `<span class="ppe-badge${missing ? ' missing' : ''}">${item}</span>`).join('');
+        }
+
+        function uploadAlertSummary(alerts) {
+            if (!alerts || !alerts.length) return '';
+            const sent = alerts.filter(item => item.status === 'alerted').length;
+            const skipped = alerts.filter(item => item.status === 'duplicate_skipped').length;
+            const failed = alerts.filter(item => item.status === 'delivery_failed').length;
+            return `<p style="margin-top:8px;color:var(--text-secondary);font-size:13px;">
+                Supervisor alerts — sent: ${sent}, duplicate skipped: ${skipped}, delivery failed: ${failed}
+            </p>`;
+        }
+
+        async function analyzeImage() {
+            const input = document.getElementById('imageInput');
+            const status = document.getElementById('imageStatus');
+            const button = document.getElementById('imageBtn');
+            const result = document.getElementById('imageResult');
+            result.innerHTML = '';
+            if (!input.files.length) {
+                status.style.color = 'var(--accent-red)';
+                status.textContent = 'Choose an image first.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', input.files[0]);
+            button.disabled = true;
+            status.style.color = 'var(--text-secondary)';
+            status.textContent = 'Analyzing…';
+            try {
+                const response = await fetch('/api/analyze/image', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Could not analyze this image');
+                status.textContent = '';
+                const missing = data.missing_ppe.length ? `<div style="margin-top: 8px;">Missing: ${ppeBadges(data.missing_ppe, true)}</div>` : '';
+                const image = data.annotated_image_base64 ? `<img src="data:image/jpeg;base64,${data.annotated_image_base64}" style="max-width: 100%; border-radius: 8px; margin-top: 14px;">` : '';
+                result.innerHTML = complianceBadge(data.is_compliant) + missing + uploadAlertSummary(data.alerts) + image;
+            } catch (error) {
+                status.style.color = 'var(--accent-red)';
+                status.textContent = error.message;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function analyzeVideo() {
+            const input = document.getElementById('videoInput');
+            const status = document.getElementById('videoStatus');
+            const button = document.getElementById('videoBtn');
+            const result = document.getElementById('videoResult');
+            result.innerHTML = '';
+            if (!input.files.length) {
+                status.style.color = 'var(--accent-red)';
+                status.textContent = 'Choose a video first.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('video', input.files[0]);
+            button.disabled = true;
+            status.style.color = 'var(--text-secondary)';
+            status.textContent = 'Analyzing… this can take a little while.';
+            try {
+                const response = await fetch('/api/analyze/video', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Could not analyze this video');
+                status.textContent = '';
+                const summary = `${complianceBadge(data.is_compliant)}<p style="margin-top: 8px; color: var(--text-secondary); font-size: 13px;">Analyzed ${data.analyzed_frames} sampled frames (${data.sample_fps} fps) in ${data.processing_seconds}s.</p>`;
+                const events = data.violation_events.map(event => `
+                    <div class="person-details non-compliant" style="display: flex; gap: 14px; align-items: flex-start;">
+                        ${event.snapshot_base64 ? `<img src="data:image/jpeg;base64,${event.snapshot_base64}" style="width: 120px; border-radius: 6px;">` : ''}
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">${event.start_seconds}s &ndash; ${event.end_seconds}s</div>
+                            <div style="margin-top: 4px;">${ppeBadges(event.missing_ppe, true)}</div>
+                        </div>
+                    </div>
+                `).join('');
+                result.innerHTML = summary + (events || '<p style="color: var(--text-secondary); margin-top: 8px;">No violations found in this clip.</p>') + uploadAlertSummary(data.alerts);
+            } catch (error) {
+                status.style.color = 'var(--accent-red)';
+                status.textContent = error.message;
+            } finally {
+                button.disabled = false;
+            }
+        }
+        {% endif %}
 
         function updateStats() {
             fetch('/stats')
@@ -769,7 +905,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             updateStats();
             setInterval(updateStats, 5000);
+            {% if camera_available %}
             document.getElementById('statusIndicator').classList.add('inactive');
+            {% endif %}
         });
     </script>
 </body>

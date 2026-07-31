@@ -124,9 +124,9 @@
       <div>
         <span class="kicker">PPE detection sandbox</span>
         <h1>Test the safety model</h1>
-        <p>Upload a photo or short video and run the same model used by Live Detection. Preview results without creating violation records.</p>
+        <p>Upload a photo or short video and run the same model used by Live Detection. Each non-compliant person creates an operational supervisor alert.</p>
       </div>
-      <div class="privacy-chip"><i class="fas fa-lock"></i> Uploads are not saved</div>
+      <div class="privacy-chip"><i class="fas fa-bell"></i> Supervisor alerts enabled</div>
     </section>
     <div class="tool-grid">
     <section class="panel">
@@ -167,6 +167,27 @@
   <script>
     function complianceBadge(isCompliant) {
       return `<span class="badge ${isCompliant ? 'compliant' : 'violation'}">${isCompliant ? 'Compliant' : 'Non-compliant'}</span>`;
+    }
+
+    function alertCards(alerts) {
+      if (!alerts || !alerts.length) return '';
+      const labels = {
+        alerted: 'Alert sent',
+        duplicate_skipped: 'Duplicate skipped',
+        delivery_failed: 'Delivery failed'
+      };
+      return alerts.map((alert, index) => `
+        <div class="event">
+          ${alert.snapshot_base64 ? `<img src="data:image/jpeg;base64,${alert.snapshot_base64}" alt="Non-compliant person ${index + 1}" title="Click to view full screen" onclick="openPreview(this.src)">` : ''}
+          <div>
+            <strong>Person ${index + 1}: ${labels[alert.status] || alert.status}</strong>
+            <div class="missing">Missing: ${alert.missing_ppe.join(', ')}</div>
+            <div class="timing">Priority P${alert.alert_priority} · ${alert.identity.worker_name || alert.identity.worker_number || 'Unknown / no ID'}</div>
+            ${alert.existing_instance_id ? `<div class="timing">Existing case: ${alert.existing_instance_id}</div>` : ''}
+            ${alert.error ? `<div class="timing">${alert.error}</div>` : ''}
+          </div>
+        </div>
+      `).join('');
     }
 
     function openPreview(source) {
@@ -218,6 +239,7 @@
             ${data.missing_ppe.length ? `Missing: <span class="missing">${data.missing_ppe.join(', ')}</span>` : ''}
           </p>
           ${data.annotated_image_base64 ? `<img class="result-image" src="data:image/jpeg;base64,${data.annotated_image_base64}">` : ''}
+          ${alertCards(data.alerts)}
         `;
       } catch (error) {
         status.className = 'status error';
@@ -264,7 +286,7 @@
             </div>
           </div>
         `).join('');
-        result.innerHTML = summary + (events || '<p class="summary-line">No violations found in this clip.</p>');
+        result.innerHTML = summary + (events || '<p class="summary-line">No violations found in this clip.</p>') + alertCards(data.alerts);
       } catch (error) {
         status.className = 'status error';
         status.textContent = error.message;
