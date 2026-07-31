@@ -229,7 +229,7 @@
       status.textContent = 'Analyzing…';
       try {
         const response = await fetch('/api/analyze/image', { method: 'POST', body: formData });
-        const data = await response.json();
+        const data = await parseJsonResponse(response);
         if (!response.ok) throw new Error(data.error || 'Could not analyze this image');
 
         status.textContent = '';
@@ -269,7 +269,7 @@
       status.textContent = 'Analyzing… this can take a little while.';
       try {
         const response = await fetch('/api/analyze/video', { method: 'POST', body: formData });
-        const data = await response.json();
+        const data = await parseJsonResponse(response);
         if (!response.ok) throw new Error(data.error || 'Could not analyze this video');
 
         status.textContent = '';

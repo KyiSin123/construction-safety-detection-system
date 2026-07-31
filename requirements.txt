@@ -1,6 +1,6 @@
 Flask
 Flask-SocketIO
-opencv-python
+opencv-python-headless
 ultralytics
 numpy
 Pillow
