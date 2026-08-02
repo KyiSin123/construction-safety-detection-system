@@ -162,9 +162,10 @@ class InstanceMixin:
                 c.execute('''
                     SELECT COUNT(*),
                            COALESCE(SUM(
-                             worker_number IS NULL OR worker_number = ''
-                             OR identity_status IS NULL
-                             OR identity_status != 'confirmed'
+                             (worker_number IS NULL OR worker_number = ''
+                               OR identity_status IS NULL
+                               OR identity_status != 'confirmed')
+                             AND (review_status IS NULL OR review_status != 'resolved')
                            ), 0)
                     FROM instances
                     WHERE detection_batch_id = %s
@@ -179,7 +180,7 @@ class InstanceMixin:
                     return False
                 # Recover a reservation left behind either when a process stopped
                 # before persisting, or when every unknown person in the claimed
-                # batch was subsequently identified by a supervisor.
+                # batch was subsequently identified or resolved by a supervisor.
                 c.execute(
                     'DELETE FROM unknown_alert_daily_batches '
                     'WHERE alert_date=CURDATE() AND detection_batch_id=%s',
@@ -188,7 +189,8 @@ class InstanceMixin:
                 conn.commit()
 
             # Respect unknown alerts created earlier today by Live Detection or
-            # by a deployment version that predates batch IDs.
+            # by a deployment version that predates batch IDs. A resolved case no
+            # longer holds the day's slot even if the person was never identified.
             c.execute('''
                 SELECT detection_batch_id
                 FROM instances
@@ -198,6 +200,7 @@ class InstanceMixin:
                     worker_number IS NULL OR worker_number = ''
                     OR identity_status IS NULL OR identity_status != 'confirmed'
                   )
+                  AND (review_status IS NULL OR review_status != 'resolved')
                 ORDER BY first_detected ASC
                 LIMIT 1
             ''')
